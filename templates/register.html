@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register - API Documentation</title>
+</head>
+<body>
+    <h1>Register</h1>
+    <p>Endpoint: <strong>POST /register</strong></p>
+    <p>Registers a new user with an email and password.</p>
+
+    <h2>Parameters</h2>
+    <ul>
+        <li><strong>email</strong> (string, required) - The user's email address.</li>
+        <li><strong>password</strong> (string, required) - The user's password.</li>
+    </ul>
+
+    <h2>Example Request</h2>
+    <pre>
+POST /register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+    </pre>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - API Documentation</title>
+</head>
+<body>
+    <h1>Login</h1>
+    <p>Endpoint: <strong>POST /login</strong></p>
+    <p>Authenticates a user and returns a JWT token.</p>
+
+    <h2>Parameters</h2>
+    <ul>
+        <li><strong>email</strong> (string, required) - The user's email address.</li>
+        <li><strong>password</strong> (string, required) - The user's password.</li>
+    </ul>
+
+    <h2>Example Request</h2>
+    <pre>
+POST /login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+    </pre>
+</body>
+</html>

@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    host TEXT NOT NULL,
+    request_count INTEGER DEFAULT 1,
+    last_request DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ip, host)
+);

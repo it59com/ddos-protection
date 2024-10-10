@@ -1,0 +1,12 @@
+{
+    "database": {
+      "type": "sqlite",
+      "connection": "ddos_protection.db"
+    },
+    "server": {
+      "port": "8080",
+      "ssl_cert": "",
+      "ssl_key": ""
+    }
+}
+  

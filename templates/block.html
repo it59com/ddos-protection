@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Block IP - API Documentation</title>
+</head>
+<body>
+    <h1>Block IP</h1>
+    <p>Endpoint: <strong>POST /block/:ip</strong></p>
+    <p>Blocks an IP address if the request count exceeds the allowed limit.</p>
+
+    <h2>Parameters</h2>
+    <ul>
+        <li><strong>ip</strong> (string, required) - The IP address to block.</li>
+        <li><strong>firewall</strong> (string, optional) - The firewall source (default: unknown).</li>
+    </ul>
+
+    <h2>Example Request</h2>
+    <pre>
+POST /block/1.2.3.4
+Authorization: Bearer <token>
+    </pre>
+</body>
+</html>
