@@ -23,7 +23,6 @@ func main() {
 
 	// Инициализируем Redis
 	routes.InitRedis()
-	defer routes.InitRedis()
 
 	// Настройка роутов Gin
 	r := gin.Default()

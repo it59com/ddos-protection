@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 )
 
@@ -114,10 +115,19 @@ func handlePackets(packetSource *gopacket.PacketSource, config *AgentConfig) {
 
 // Функция для проверки протокола пакета
 func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
-	proto := packet.TransportLayer().LayerType().String()
-	for _, p := range protocols {
-		if strings.EqualFold(p, proto) {
-			return true
+	if transportLayer := packet.TransportLayer(); transportLayer != nil {
+		protocol := transportLayer.LayerType()
+		for _, p := range protocols {
+			switch strings.ToLower(p) {
+			case "tcp":
+				if protocol == layers.LayerTypeTCP {
+					return true
+				}
+			case "udp":
+				if protocol == layers.LayerTypeUDP {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -180,7 +190,6 @@ WantedBy=multi-user.target`
 }
 
 func listInterfaces() {
-
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		log.Fatalf("Ошибка при получении списка интерфейсов: %v", err)

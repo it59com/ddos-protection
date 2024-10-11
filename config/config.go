@@ -17,6 +17,11 @@ type Config struct {
 		SSLCert string `json:"ssl_cert"`
 		SSLKey  string `json:"ssl_key"`
 	} `json:"server"`
+	Redis struct {
+		Address  string `json:"address"`
+		Password string `json:"password"`
+		DB       int    `json:"db"`
+	} `json:"redis"`
 }
 
 var AppConfig *Config

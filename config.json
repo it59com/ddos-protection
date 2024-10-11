@@ -7,6 +7,11 @@
       "port": "8080",
       "ssl_cert": "",
       "ssl_key": ""
-    }
+    },
+    "redis": {
+      "address": "localhost:6379",
+      "password": "",
+      "db": 0
+  }
 }
   

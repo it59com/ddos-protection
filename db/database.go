@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql" // Импорт для MySQL
 	"github.com/jmoiron/sqlx"
@@ -73,8 +72,8 @@ func InitDB(config *config.Config) error {
 // AddToDatabase добавляет информацию о заблокированном IP в базу данных
 func AddToDatabase(ip string, firewall string, requestCount int) error {
 	query := `INSERT INTO ip_addresses (ip, blocked_at, request_count, weight, firewall_source) 
-			  VALUES (?, ?, ?, ?, ?);`
-	_, err := DB.Exec(query, ip, time.Now(), requestCount, 1, firewall)
+              VALUES (?, CURRENT_TIMESTAMP, ?, 1, ?);`
+	_, err := DB.Exec(query, ip, requestCount, firewall)
 	if err != nil {
 		return fmt.Errorf("не удалось добавить IP в базу данных: %w", err)
 	}

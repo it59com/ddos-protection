@@ -3,8 +3,8 @@ package migrations
 import (
 	"ddos-protection-api/db"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -83,7 +83,7 @@ func RunMigrations() error {
 			continue
 		}
 
-		content, err := ioutil.ReadFile(file)
+		content, err := os.ReadFile(file) // Используем os.ReadFile вместо ioutil.ReadFile
 		if err != nil {
 			return fmt.Errorf("ошибка при чтении файла миграции %s: %w", version, err)
 		}
@@ -91,6 +91,50 @@ func RunMigrations() error {
 		if err := applyMigration(version, string(content)); err != nil {
 			return err
 		}
+		// Пример применения миграций с проверкой наличия столбца
+		if err := addColumnIfNotExists("requests", "firewall_source", "TEXT"); err != nil {
+			return fmt.Errorf("ошибка при добавлении столбца firewall_source в таблицу requests: %w", err)
+		}
+		if err := addColumnIfNotExists("ip_addresses", "firewall_source", "TEXT"); err != nil {
+			return fmt.Errorf("ошибка при добавлении столбца firewall_source в таблицу ip_addresses: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func addColumnIfNotExists(tableName, columnName, columnDefinition string) error {
+	// Проверяем, существует ли столбец
+	query := fmt.Sprintf(`PRAGMA table_info(%s);`, tableName)
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		return fmt.Errorf("ошибка при получении информации о таблице %s: %w", tableName, err)
+	}
+	defer rows.Close()
+
+	columnExists := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notnull, dflt_value, pk int
+		if err := rows.Scan(&cid, &name, &colType, &notnull, &dflt_value, &pk); err != nil {
+			return fmt.Errorf("ошибка при сканировании информации о столбцах: %w", err)
+		}
+		if name == columnName {
+			columnExists = true
+			break
+		}
+	}
+
+	if !columnExists {
+		// Добавляем столбец, если его нет
+		alterQuery := fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s;`, tableName, columnName, columnDefinition)
+		if _, err := db.DB.Exec(alterQuery); err != nil {
+			return fmt.Errorf("ошибка при добавлении столбца %s в таблицу %s: %w", columnName, tableName, err)
+		}
+		log.Printf("Столбец %s успешно добавлен в таблицу %s", columnName, tableName)
+	} else {
+		log.Printf("Столбец %s уже существует в таблице %s, пропуск", columnName, tableName)
 	}
 
 	return nil

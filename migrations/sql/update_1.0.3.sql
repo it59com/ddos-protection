@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS ip_addresses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    blocked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    request_count INTEGER NOT NULL,
+    weight INTEGER NOT NULL,
+    firewall_source TEXT NOT NULL
+);

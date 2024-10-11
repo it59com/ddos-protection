@@ -17,12 +17,12 @@ func main() {
 	if err := db.InitDB(config.AppConfig); err != nil {
 		log.Fatalf("Ошибка инициализации базы данных: %v", err)
 	}
-	defer db.DB.Close()
 
-	// Запускаем обновления миграций
+	// Запускаем миграции
 	if err := migrations.RunMigrations(); err != nil {
 		log.Fatalf("Ошибка запуска обновления базы данных: %v", err)
 	}
+	defer db.DB.Close()
 
 	log.Println("Все миграции успешно применены")
 }

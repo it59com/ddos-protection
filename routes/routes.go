@@ -3,8 +3,10 @@ package routes
 import (
 	"context"
 	"ddos-protection-api/auth"
+	"ddos-protection-api/config"
 	"ddos-protection-api/db"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -25,8 +27,14 @@ const (
 // Инициализация Redis
 func InitRedis() {
 	rdb = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379", // Замените на адрес вашего Redis-сервера
+		Addr:     config.AppConfig.Redis.Address,
+		Password: config.AppConfig.Redis.Password,
+		DB:       config.AppConfig.Redis.DB,
 	})
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Ошибка при подключении к Redis: %v", err)
+	}
+	fmt.Println("Подключение к Redis установлено успешно.")
 }
 
 // Функция для регистрации нового пользователя
@@ -77,9 +85,9 @@ func BlockIPHandler(c *gin.Context) {
 	host := c.ClientIP()
 	firewall := c.DefaultQuery("firewall", "unknown")
 
-	// Проверка и учет количества запросов от IP
 	blocked, err := trackIPRequests(ip, host, firewall)
 	if err != nil {
+		log.Printf("Ошибка в trackIPRequests: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -93,13 +101,13 @@ func BlockIPHandler(c *gin.Context) {
 
 func trackIPRequests(ip string, host string, firewall string) (bool, error) {
 	// SQL-запрос для вставки или обновления записи в таблице requests
-	query := `INSERT INTO requests (ip, host, request_count, last_request) 
-			  VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-			  ON CONFLICT(ip, host) DO UPDATE SET 
-			  request_count = request_count + 1,
-			  last_request = CURRENT_TIMESTAMP;`
+	query := `INSERT INTO requests (ip, host, request_count, last_request, firewall_source) 
+              VALUES (?, ?, 1, CURRENT_TIMESTAMP, ?)
+              ON CONFLICT(ip, host) DO UPDATE SET 
+              request_count = request_count + 1,
+              last_request = CURRENT_TIMESTAMP;`
 
-	_, err := db.DB.Exec(query, ip, host)
+	_, err := db.DB.Exec(query, ip, host, firewall)
 	if err != nil {
 		return false, fmt.Errorf("ошибка обновления данных о запросе: %w", err)
 	}
@@ -130,11 +138,11 @@ func trackIPRequests(ip string, host string, firewall string) (bool, error) {
 // Новый маршрут для формирования отчета по блокировкам
 func BlockReportHandler(c *gin.Context) {
 	rows, err := db.DB.Query(`
-		SELECT ip, host, request_count, last_request 
-		FROM requests 
-		WHERE request_count >= ? 
-		ORDER BY last_request DESC
-	`, requestLimit)
+        SELECT ip, host, request_count, last_request, firewall_source 
+        FROM requests 
+        WHERE request_count >= ? 
+        ORDER BY last_request DESC
+    `, requestLimit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ошибка получения отчета"})
 		return
@@ -143,20 +151,21 @@ func BlockReportHandler(c *gin.Context) {
 
 	var report []map[string]interface{}
 	for rows.Next() {
-		var ip, host string
+		var ip, host, firewallSource string
 		var requestCount int
 		var lastRequest time.Time
 
-		if err := rows.Scan(&ip, &host, &requestCount, &lastRequest); err != nil {
+		if err := rows.Scan(&ip, &host, &requestCount, &lastRequest, &firewallSource); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "ошибка при сканировании данных отчета"})
 			return
 		}
 
 		report = append(report, map[string]interface{}{
-			"ip":            ip,
-			"host":          host,
-			"request_count": requestCount,
-			"last_request":  lastRequest,
+			"ip":              ip,
+			"host":            host,
+			"request_count":   requestCount,
+			"last_request":    lastRequest,
+			"firewall_source": firewallSource,
 		})
 	}
 
