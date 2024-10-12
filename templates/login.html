@@ -1,28 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Login - API Documentation</title>
+    <title>Вход пользователя</title>
 </head>
 <body>
-    <h1>Login</h1>
-    <p>Endpoint: <strong>POST /login</strong></p>
-    <p>Authenticates a user and returns a JWT token.</p>
-
-    <h2>Parameters</h2>
+    <h1>Вход</h1>
+    <p>Эндпоинт: <code>POST /login</code></p>
+    <p>Этот эндпоинт используется для входа пользователя и получения JWT-токена для аутентификации.</p>
+    <h2>Параметры запроса:</h2>
     <ul>
-        <li><strong>email</strong> (string, required) - The user's email address.</li>
-        <li><strong>password</strong> (string, required) - The user's password.</li>
+        <li><strong>email</strong>: Электронная почта пользователя (обязательный)</li>
+        <li><strong>password</strong>: Пароль пользователя (обязательный)</li>
     </ul>
-
-    <h2>Example Request</h2>
+    <h2>Пример запроса:</h2>
     <pre>
-POST /login
-Content-Type: application/json
-
 {
-  "email": "test@example.com",
-  "password": "password123"
+    "email": "example@example.com",
+    "password": "your_password"
 }
     </pre>
 </body>

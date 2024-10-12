@@ -1,28 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Register - API Documentation</title>
+    <title>Регистрация пользователя</title>
 </head>
 <body>
-    <h1>Register</h1>
-    <p>Endpoint: <strong>POST /register</strong></p>
-    <p>Registers a new user with an email and password.</p>
-
-    <h2>Parameters</h2>
+    <h1>Регистрация</h1>
+    <p>Эндпоинт: <code>POST /register</code></p>
+    <p>Используйте этот эндпоинт для регистрации нового пользователя.</p>
+    <h2>Параметры запроса:</h2>
     <ul>
-        <li><strong>email</strong> (string, required) - The user's email address.</li>
-        <li><strong>password</strong> (string, required) - The user's password.</li>
+        <li><strong>email</strong>: Электронная почта пользователя (обязательный)</li>
+        <li><strong>password</strong>: Пароль пользователя (обязательный)</li>
     </ul>
-
-    <h2>Example Request</h2>
+    <h2>Пример запроса:</h2>
     <pre>
-POST /register
-Content-Type: application/json
-
 {
-  "email": "test@example.com",
-  "password": "password123"
+    "email": "example@example.com",
+    "password": "your_password"
 }
     </pre>
 </body>

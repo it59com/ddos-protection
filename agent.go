@@ -8,9 +8,9 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
-	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -19,15 +19,26 @@ import (
 
 // Структура конфигурации агента
 type AgentConfig struct {
-	ServerURL string   `json:"server_url"`
-	Token     string   `json:"token"`
-	Interface string   `json:"interface"`
-	AgentName string   `json:"agent_name"`
-	Protocols []string `json:"protocols"`
-	Ports     []int    `json:"ports"`
+	ServerURL    string   `json:"server_url"`
+	Token        string   `json:"token"`
+	Interface    string   `json:"interface"`
+	AgentName    string   `json:"agent_name"`
+	Protocols    []string `json:"protocols"`
+	Ports        []int    `json:"ports"`
+	RequestLimit int      `json:"request_limit"`
+	TimeWindow   int      `json:"time_window_ms"`
 }
 
 const blockEndpoint = "/block"
+
+// Структура для отслеживания состояния IP-адресов и портов
+type IPPortState struct {
+	count     int
+	lastReset time.Time
+}
+
+var ipPortStates = make(map[string]*IPPortState)
+var ipPortMutex sync.Mutex
 
 // Чтение конфигурации из файла
 func loadConfig(filename string) (*AgentConfig, error) {
@@ -46,25 +57,9 @@ func loadConfig(filename string) (*AgentConfig, error) {
 	return config, nil
 }
 
-// Проверка, доступен ли интерфейс
-func validateInterface(interfaceName string) error {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return fmt.Errorf("ошибка при получении списка интерфейсов: %w", err)
-	}
-
-	for _, i := range interfaces {
-		if i.Name == interfaceName {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("интерфейс %s не найден", interfaceName)
-}
-
-// Функция для отправки запроса на блокировку IP
-func blockIP(ip string, config *AgentConfig) error {
-	url := fmt.Sprintf("%s%s/%s?firewall=%s", config.ServerURL, blockEndpoint, ip, config.AgentName)
+// Функция для отправки запроса на блокировку IP с указанием порта
+func blockIP(ip string, port int, config *AgentConfig) error {
+	url := fmt.Sprintf("%s%s/%s?firewall=%s&port=%d", config.ServerURL, blockEndpoint, ip, config.AgentName, port)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return fmt.Errorf("ошибка создания запроса: %w", err)
@@ -85,7 +80,7 @@ func blockIP(ip string, config *AgentConfig) error {
 		return fmt.Errorf("не удалось заблокировать IP, статус код: %d", resp.StatusCode)
 	}
 
-	fmt.Printf("Запрос на блокировку IP %s успешно выполнен\n", ip)
+	fmt.Printf("Запрос на блокировку IP %s на порту %d успешно выполнен\n", ip, port)
 	return nil
 }
 
@@ -102,15 +97,61 @@ func handlePackets(packetSource *gopacket.PacketSource, config *AgentConfig) {
 		srcIP := ipLayer.NetworkFlow().Src().String()
 
 		// Проверка протокола и порта
-		if !isAllowedProtocol(packet, config.Protocols) || !isAllowedPort(packet, config.Ports) {
+		if !isAllowedProtocol(packet, config.Protocols) {
 			continue
 		}
 
-		// Блокировка IP
-		if err := blockIP(srcIP, config); err != nil {
-			log.Printf("Ошибка при блокировке IP %s: %v\n", srcIP, err)
+		// Извлечение порта из транспортного слоя
+		transportLayer := packet.TransportLayer()
+		if transportLayer == nil {
+			continue
+		}
+
+		var srcPort int
+		switch layer := transportLayer.(type) {
+		case *layers.TCP:
+			srcPort = int(layer.SrcPort)
+		case *layers.UDP:
+			srcPort = int(layer.SrcPort)
+		}
+
+		if !isAllowedPort(srcPort, config.Ports) {
+			continue
+		}
+
+		// Проверка IP и порта, и блокировка при необходимости
+		if checkAndBlockIP(srcIP, srcPort, config) {
+			if err := blockIP(srcIP, srcPort, config); err != nil {
+				log.Printf("Ошибка при блокировке IP %s на порту %d: %v\n", srcIP, srcPort, err)
+			}
 		}
 	}
+}
+
+// Проверка IP и порта и блокировка при превышении лимита запросов
+func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
+	ipPortMutex.Lock()
+	defer ipPortMutex.Unlock()
+
+	key := fmt.Sprintf("%s:%d", ip, port)
+	state, exists := ipPortStates[key]
+	if !exists || time.Since(state.lastReset) > time.Duration(config.TimeWindow)*time.Millisecond {
+		// Сброс счётчика при новом IP или по истечении временного окна
+		ipPortStates[key] = &IPPortState{
+			count:     1,
+			lastReset: time.Now(),
+		}
+		return false
+	}
+
+	// Увеличиваем счетчик и проверяем лимит
+	state.count++
+	if state.count > config.RequestLimit {
+		delete(ipPortStates, key) // Очистка состояния для данного IP и порта
+		return true
+	}
+
+	return false
 }
 
 // Функция для проверки протокола пакета
@@ -133,76 +174,18 @@ func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
 	return false
 }
 
-// Функция для проверки порта пакета
-func isAllowedPort(packet gopacket.Packet, ports []int) bool {
-	transportLayer := packet.TransportLayer()
-	if transportLayer == nil {
-		return false
-	}
-	srcPortStr, dstPortStr := transportLayer.TransportFlow().Endpoints()
-	srcPort, err1 := strconv.Atoi(srcPortStr.String())
-	dstPort, err2 := strconv.Atoi(dstPortStr.String())
-
-	if err1 != nil || err2 != nil {
-		return false
-	}
-
-	for _, port := range ports {
-		if port == srcPort || port == dstPort {
+// Функция для проверки порта
+func isAllowedPort(port int, ports []int) bool {
+	for _, p := range ports {
+		if port == p {
 			return true
 		}
 	}
 	return false
 }
 
-// Установка агента как системного сервиса
-func installService() error {
-	serviceContent := `[Unit]
-Description=DDOS Protection Agent
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/ddos-agent
-Restart=always
-User=root
-
-[Install]
-WantedBy=multi-user.target`
-
-	servicePath := "/etc/systemd/system/ddos-agent.service"
-
-	// Запись файла сервиса
-	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
-		return fmt.Errorf("ошибка записи файла сервиса: %w", err)
-	}
-
-	// Активируем сервис
-	cmds := []string{"systemctl daemon-reload", "systemctl enable ddos-agent", "systemctl start ddos-agent"}
-	for _, cmd := range cmds {
-		parts := strings.Fields(cmd)
-		if err := exec.Command(parts[0], parts[1:]...).Run(); err != nil {
-			return fmt.Errorf("ошибка при выполнении команды %s: %w", cmd, err)
-		}
-	}
-
-	fmt.Println("Сервис ddos-agent установлен и запущен.")
-	return nil
-}
-
-func listInterfaces() {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		log.Fatalf("Ошибка при получении списка интерфейсов: %v", err)
-	}
-	fmt.Println("Доступные интерфейсы:")
-	for _, i := range interfaces {
-		fmt.Printf("- %s\n", i.Name)
-	}
-}
-
 func main() {
-	listInterfaces()
-	// Загрузка конфигурации
+	// Загружаем конфигурацию
 	config, err := loadConfig("agent.conf")
 	if err != nil {
 		log.Fatalf("Ошибка загрузки конфигурации: %v", err)
@@ -220,15 +203,29 @@ func main() {
 	}
 	defer handle.Close()
 
-	// Установка фильтра для протоколов и портов
+	// Установка фильтра для протоколов
 	filter := fmt.Sprintf("tcp or udp")
 	if err := handle.SetBPFFilter(filter); err != nil {
 		log.Fatalf("Ошибка при установке фильтра: %v", err)
 	}
-	fmt.Printf("Запуск агента на интерфейсе %s с именем агента %s\n", config.Interface, config.AgentName)
-	fmt.Printf("Протоколы: %v, Порты: %v\n", config.Protocols, config.Ports)
 
 	// Чтение пакетов
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	handlePackets(packetSource, config)
+}
+
+// validateInterface проверяет, доступен ли указанный интерфейс
+func validateInterface(interfaceName string) error {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return fmt.Errorf("ошибка при получении списка интерфейсов: %w", err)
+	}
+
+	for _, i := range interfaces {
+		if i.Name == interfaceName {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("интерфейс %s не найден", interfaceName)
 }

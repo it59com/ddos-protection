@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql" // Импорт для MySQL
 	"github.com/jmoiron/sqlx"
@@ -69,13 +70,48 @@ func InitDB(config *config.Config) error {
 	return nil
 }
 
-// AddToDatabase добавляет информацию о заблокированном IP в базу данных
-func AddToDatabase(ip string, firewall string, requestCount int) error {
-	query := `INSERT INTO ip_addresses (ip, blocked_at, request_count, weight, firewall_source) 
-              VALUES (?, CURRENT_TIMESTAMP, ?, 1, ?);`
-	_, err := DB.Exec(query, ip, requestCount, firewall)
+// AddToDatabase добавляет информацию о заблокированном IP-адресе в базу данных
+func AddToDatabase(ip, firewall string, requestCount, userID, port int) error {
+	query := `INSERT INTO ip_addresses (user_id, ip, blocked_at, request_count, weight, firewall_source, port) 
+	          VALUES (?, ?, CURRENT_TIMESTAMP, ?, 1, ?, ?);`
+
+	_, err := DB.Exec(query, userID, ip, requestCount, firewall, port)
 	if err != nil {
 		return fmt.Errorf("не удалось добавить IP в базу данных: %w", err)
 	}
 	return nil
+}
+
+// Пример функции для создания записи в таблице sessions при аутентификации
+func CreateSession(email, token, host string) error {
+	query := `INSERT INTO sessions (email, token, created_at, host) VALUES (?, ?, CURRENT_TIMESTAMP, ?)`
+	_, err := DB.Exec(query, email, token, host)
+	if err != nil {
+		return fmt.Errorf("не удалось создать сессию: %v", err)
+	}
+	return nil
+}
+
+// GetUserIDByToken получает userID на основе токена из таблицы sessions
+func GetUserIDByToken(token string) (int, error) {
+	// Удаление префикса "Bearer " из токена, если он присутствует
+	token = strings.TrimPrefix(token, "Bearer ")
+
+	// Получение email из таблицы sessions на основе token
+	var email string
+	query := `SELECT email FROM sessions WHERE token = ?`
+	err := DB.QueryRow(query, token).Scan(&email)
+	if err != nil {
+		return 0, fmt.Errorf("токен не найден или неактивен: %v", err)
+	}
+
+	// Получение userID из таблицы users на основе email
+	var userID int
+	query = `SELECT id FROM users WHERE email = ?`
+	err = DB.QueryRow(query, email).Scan(&userID)
+	if err != nil {
+		return 0, fmt.Errorf("пользователь не найден: %v", err)
+	}
+
+	return userID, nil
 }

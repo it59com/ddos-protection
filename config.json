@@ -1,7 +1,7 @@
 {
     "database": {
       "type": "sqlite",
-      "connection": "ddos_protection.db"
+      "connection": "ddos_protection-n.db"
     },
     "server": {
       "port": "8080",

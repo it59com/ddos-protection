@@ -4,6 +4,7 @@ import (
 	"ddos-protection-api/config"
 	"ddos-protection-api/db"
 	"ddos-protection-api/routes"
+	"ddos-protection-api/services"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func main() {
 	defer db.DB.Close()
 
 	// Инициализируем Redis
-	routes.InitRedis()
+	services.InitRedis()
 
 	// Настройка роутов Gin
 	r := gin.Default()

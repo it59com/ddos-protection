@@ -1,24 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Block IP - API Documentation</title>
+    <title>Блокировка IP-адреса</title>
 </head>
 <body>
-    <h1>Block IP</h1>
-    <p>Endpoint: <strong>POST /block/:ip</strong></p>
-    <p>Blocks an IP address if the request count exceeds the allowed limit.</p>
-
-    <h2>Parameters</h2>
+    <h1>Блокировка IP-адреса</h1>
+    <p>Эндпоинт: <code>POST /block/:ip</code></p>
+    <p>Этот эндпоинт используется для блокировки IP-адреса при превышении лимита запросов.</p>
+    <h2>Параметры запроса:</h2>
     <ul>
-        <li><strong>ip</strong> (string, required) - The IP address to block.</li>
-        <li><strong>firewall</strong> (string, optional) - The firewall source (default: unknown).</li>
+        <li><strong>firewall</strong>: Название хоста или агента (опционально)</li>
+        <li><strong>port</strong>: Порт, на который отправляются запросы (опционально)</li>
     </ul>
-
-    <h2>Example Request</h2>
+    <h2>Пример запроса:</h2>
     <pre>
-POST /block/1.2.3.4
-Authorization: Bearer <token>
+POST /block/192.168.0.1?firewall=Agent1&port=80
+Header:
+Authorization: Bearer YOUR_TOKEN
     </pre>
 </body>
 </html>
