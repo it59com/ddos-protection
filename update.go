@@ -3,11 +3,11 @@ package main
 import (
 	"ddos-protection-api/config"
 	"ddos-protection-api/db"
-	migrations "ddos-protection-api/migrations/sql"
+	migrations "ddos-protection-api/migrations"
 	"log"
 )
 
-func main() {
+func update() {
 	// Загружаем конфигурацию
 	if err := config.LoadConfig("config.json"); err != nil {
 		log.Fatalf("Ошибка загрузки конфигурации: %v", err)

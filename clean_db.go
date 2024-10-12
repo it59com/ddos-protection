@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-func main() {
+func main_clean() {
 	// Загружаем конфигурацию
 	// Загружаем конфигурацию
 	if err := config.LoadConfig("config.json"); err != nil {
