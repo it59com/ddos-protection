@@ -12,21 +12,27 @@ import (
 
 var jwtKey = []byte("your_secret_key") // Замените на более надежный секретный ключ
 
+// Обновленная структура Claims с полем UserID
+
 type Claims struct {
-	Email string `json:"email"`
+	UserID int    `json:"user_id"`
+	Email  string `json:"email"`
 	jwt.StandardClaims
 }
 
+// Функция для хеширования пароля
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	return string(bytes), err
 }
 
+// Функция для проверки пароля
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
 
+// Функция для регистрации пользователя
 func RegisterUser(email, password string) error {
 	passwordHash, err := HashPassword(password)
 	if err != nil {
@@ -42,22 +48,25 @@ func RegisterUser(email, password string) error {
 	return nil
 }
 
-func LoginUser(email, password string) (string, error) {
+// Функция для логина пользователя
+// auth/auth.go
+func LoginUser(email, password string) (int, string, error) {
+	var userID int
 	var passwordHash string
-	query := `SELECT password_hash FROM users WHERE email = ?;`
-	err := db.DB.QueryRow(query, email).Scan(&passwordHash)
+	query := `SELECT id, password_hash FROM users WHERE email = ?`
+	err := db.DB.QueryRow(query, email).Scan(&userID, &passwordHash)
 	if err != nil {
-		return "", errors.New("пользователь не найден")
+		return 0, "", errors.New("пользователь не найден")
 	}
 
 	if !CheckPasswordHash(password, passwordHash) {
-		return "", errors.New("неверный пароль")
+		return 0, "", errors.New("неверный пароль")
 	}
 
-	// Создание токена
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
-		Email: email,
+		UserID: userID,
+		Email:  email,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
 		},
@@ -66,12 +75,13 @@ func LoginUser(email, password string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
-	return tokenString, nil
+	return userID, tokenString, nil
 }
 
+// Функция для валидации токена
 func ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {

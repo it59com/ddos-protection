@@ -1,7 +1,6 @@
 package services
 
 import (
-	"database/sql"
 	"ddos-protection-api/db"
 	"fmt"
 	"log"
@@ -113,60 +112,4 @@ func BlockReportHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"report": report})
-}
-
-// trackIPRequests обрабатывает запросы и блокирует IP при превышении лимита
-func trackIPRequests(userID int, ip, host, firewall string, port int) (bool, error) {
-
-	// Сначала проверяем, существует ли запись
-	var requestCount int
-	queryCheck := `SELECT request_count FROM requests WHERE user_id = ? AND ip = ? AND host = ? AND port = ?`
-	err := db.DB.QueryRow(queryCheck, userID, ip, host, port).Scan(&requestCount)
-	if err != nil && err != sql.ErrNoRows {
-		return false, fmt.Errorf("ошибка проверки записи: %w", err)
-	}
-
-	// Если запись существует, обновляем её
-	if err == nil {
-		queryUpdate := `UPDATE requests SET request_count = request_count + 1, last_request = CURRENT_TIMESTAMP WHERE user_id = ? AND ip = ? AND host = ? AND port = ?`
-		_, err := db.DB.Exec(queryUpdate, userID, ip, host, port)
-		if err != nil {
-			return false, fmt.Errorf("ошибка обновления данных о запросе: %w", err)
-		}
-	} else {
-		// Иначе, вставляем новую запись
-		queryInsert := `INSERT INTO requests (user_id, ip, host, request_count, last_request, firewall_source, port) 
-                        VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, ?, ?)`
-		_, err := db.DB.Exec(queryInsert, userID, ip, host, firewall, port)
-		if err != nil {
-			return false, fmt.Errorf("ошибка вставки новой записи: %w", err)
-		}
-	}
-
-	// Учет лимита запросов с использованием Redis
-	key := fmt.Sprintf("req_count:%d:%s:%d", userID, ip, port) // Ключ Redis, уникальный для пользователя, IP и порта
-	count, err := rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return false, fmt.Errorf("ошибка инкремента счетчика в Redis: %w", err)
-	}
-
-	// Устанавливаем TTL для ключа, если это первый запрос
-	if count == 1 {
-		err = rdb.Expire(ctx, key, timeWindow).Err()
-		if err != nil {
-			return false, fmt.Errorf("ошибка установки TTL в Redis: %w", err)
-		}
-	}
-
-	// Проверка лимита запросов
-	if count > requestLimit {
-		// Добавляем заблокированный IP в таблицу ip_addresses
-		err := db.AddToDatabase(ip, firewall, int(count), userID, port)
-		if err != nil {
-			return false, fmt.Errorf("ошибка добавления IP в базу данных: %w", err)
-		}
-		return true, nil
-	}
-
-	return false, nil
 }

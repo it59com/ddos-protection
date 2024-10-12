@@ -32,5 +32,6 @@ func InitRoutes(router *gin.Engine) {
 
 	router.GET("/docs/report", AuthMiddleware(), services.IPWeightReportHandler)
 	router.GET("/ws", services.WebSocketHandler) // новый маршрут для WebSocket
+	router.GET("/active_sessions", services.GetActiveSessions)
 
 }

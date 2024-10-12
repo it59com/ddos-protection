@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"ddos-protection-api/db"
 	"fmt"
 	"log"
@@ -31,7 +32,7 @@ func CalculateWeight(ip string, userID int, agentName string, requestCount int, 
 	}
 
 	// Обновление веса в базе данных
-	err := UpdateIPWeight(ip, userID, agentName, weight)
+	err := AddOrUpdateIPWeight(ip, userID, agentName, weight)
 	if err != nil {
 		return 0, err
 	}
@@ -39,16 +40,37 @@ func CalculateWeight(ip string, userID int, agentName string, requestCount int, 
 	return weight, nil
 }
 
-// UpdateIPWeight - функция для обновления веса IP-адреса в таблице ip_weights
-func UpdateIPWeight(ip string, userID int, agentName string, weight int) error {
-	query := `INSERT INTO ip_weights (user_id, agent_name, ip, weight, last_updated) 
-              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP);`
+// AddOrUpdateIPWeight - функция для обновления или добавления веса IP-адреса в таблице ip_weights
+func AddOrUpdateIPWeight(ip string, userID int, agentName string, weight int) error {
+	var currentWeight int
 
-	_, err := db.DB.Exec(query, ip, userID, agentName, weight)
+	// Проверяем текущий вес IP в таблице
+	query := `SELECT weight FROM ip_weights WHERE ip = ? AND user_id = ?`
+	err := db.DB.QueryRow(query, ip, userID).Scan(&currentWeight)
 	if err != nil {
-		return fmt.Errorf("ошибка обновления веса IP: %w", err)
+		if err == sql.ErrNoRows {
+			// Если IP не найден, добавляем новую запись
+			query = `INSERT INTO ip_weights (user_id, agent_name, ip, weight, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
+			_, err = db.DB.Exec(query, userID, agentName, ip, weight)
+			if err != nil {
+				return fmt.Errorf("ошибка при добавлении нового IP в ip_weights: %v", err)
+			}
+			log.Printf("Добавлен новый IP %s с весом %d", ip, weight)
+			return nil
+		}
+		return fmt.Errorf("ошибка при проверке веса IP: %v", err)
 	}
 
-	log.Printf("Вес для IP %s (пользователь %d, агент %s) установлен на %d", ip, userID, agentName, weight)
+	// Если IP уже существует, обновляем вес
+	newWeight := currentWeight + weight
+	if newWeight > 100 {
+		newWeight = 100
+	}
+	query = `UPDATE ip_weights SET weight = ?, last_updated = CURRENT_TIMESTAMP WHERE ip = ? AND user_id = ?`
+	_, err = db.DB.Exec(query, newWeight, ip, userID)
+	if err != nil {
+		return fmt.Errorf("ошибка при обновлении веса IP: %v", err)
+	}
+	log.Printf("Обновлен IP %s с новым весом %d", ip, newWeight)
 	return nil
 }

@@ -73,9 +73,10 @@ func main() {
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 		agentpc.HandlePacketsAgent(packetSource, config)
 	}()
+	agentName := config.AgentName
+	go agentpc.WebSocketAgentConnect(config.ServerURL, config.Token, agentName)
 
 	// Запуск WebSocket подключения в отдельной горутине
-	go agentpc.WebSocketAgentConnect(config.ServerURL, config.Token)
 
 	// Блокировка основного потока, чтобы горутины продолжали выполняться
 	select {}

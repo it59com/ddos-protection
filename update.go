@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-func update() {
+func main() {
 	// Загружаем конфигурацию
 	if err := config.LoadConfig("config.json"); err != nil {
 		log.Fatalf("Ошибка загрузки конфигурации: %v", err)

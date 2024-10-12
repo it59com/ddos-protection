@@ -67,8 +67,8 @@ func (agent *WebSocketAgent) ReceiveMessages() {
 	}
 }
 
-// WebSocketAgentConnect выполняет подключение к WebSocket-серверу с переподключением
-func WebSocketAgentConnect(url string, token string) {
+// WebSocketAgentConnect выполняет подключение к WebSocket-серверу с переподключением и отправкой AgentName
+func WebSocketAgentConnect(url, token, agentName string) {
 	// Определение протокола для WebSocket
 	if strings.HasPrefix(url, "https://") {
 		url = strings.Replace(url, "https://", "wss://", 1) + "/ws"
@@ -90,6 +90,15 @@ func WebSocketAgentConnect(url string, token string) {
 		}
 
 		log.Println("Подключение к WebSocket серверу установлено")
+
+		// Отправка `AgentName` сразу после подключения
+		err = conn.WriteMessage(websocket.TextMessage, []byte(agentName))
+		if err != nil {
+			log.Printf("Ошибка при отправке имени агента: %v", err)
+			conn.Close()
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
 		// Обработка сообщений WebSocket
 		for {

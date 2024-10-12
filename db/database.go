@@ -115,3 +115,13 @@ func GetUserIDByToken(token string) (int, error) {
 
 	return userID, nil
 }
+
+// RemoveFromDatabase удаляет запись IP-адреса из таблицы ip_addresses
+func RemoveFromDatabase(ip, firewall string, userID, port int) error {
+	query := `DELETE FROM ip_addresses WHERE ip = ? AND firewall_source = ? AND user_id = ? AND port = ?`
+	_, err := DB.Exec(query, ip, firewall, userID, port)
+	if err != nil {
+		return fmt.Errorf("ошибка удаления IP из базы данных: %w", err)
+	}
+	return nil
+}
