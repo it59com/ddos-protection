@@ -88,7 +88,7 @@ func WebSocketHandler(c *gin.Context) {
 		log.Printf("Получено сообщение от агента пользователя %d: %s", userID, string(message))
 
 		// Ответ на сообщение
-		response := []byte("Сообщение получено")
+		response := []byte("Сообщение получено User_id $userID")
 		if err := conn.WriteMessage(messageType, response); err != nil {
 			log.Printf("Ошибка отправки сообщения: %v", err)
 			break

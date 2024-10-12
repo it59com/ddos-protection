@@ -67,25 +67,53 @@ func (agent *WebSocketAgent) ReceiveMessages() {
 	}
 }
 
-// WebSocketAgentConnect выполняет подключение к WebSocket-серверу и обработку сообщений
+// WebSocketAgentConnect выполняет подключение к WebSocket-серверу с переподключением
 func WebSocketAgentConnect(url string, token string) {
-	agent, err := NewWebSocketAgent(url, token)
-	if err != nil {
-		log.Fatalf("Ошибка подключения к WebSocket серверу: %v", err)
-		return
+	// Определение протокола для WebSocket
+	if strings.HasPrefix(url, "https://") {
+		url = strings.Replace(url, "https://", "wss://", 1) + "/ws"
+	} else if strings.HasPrefix(url, "http://") {
+		url = strings.Replace(url, "http://", "ws://", 1) + "/ws"
+	} else {
+		url = "ws://" + url + "/ws"
 	}
-	defer agent.Close()
 
-	// Запуск обработчика входящих сообщений в отдельной горутине
-	go agent.ReceiveMessages()
+	headers := http.Header{}
+	headers.Add("Authorization", "Bearer "+token)
 
-	// Отправка сообщений через интервал
 	for {
-		err := agent.SendMessage("Сообщение от агента")
+		conn, _, err := websocket.DefaultDialer.Dial(url, headers)
 		if err != nil {
-			log.Printf("Ошибка при отправке сообщения: %v", err)
-			break
+			log.Printf("Ошибка подключения к WebSocket серверу: %v. Повторная попытка через 5 секунд...", err)
+			time.Sleep(5 * time.Second)
+			continue
 		}
-		time.Sleep(5 * time.Second) // Интервал между отправками сообщений
+
+		log.Println("Подключение к WebSocket серверу установлено")
+
+		// Обработка сообщений WebSocket
+		for {
+			err := conn.WriteMessage(websocket.TextMessage, []byte("Сообщение от агента"))
+			if err != nil {
+				log.Printf("Ошибка при отправке сообщения: %v", err)
+				break
+			}
+
+			// Чтение ответа от сервера
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("Ошибка при получении сообщения: %v", err)
+				break
+			}
+			log.Printf("Ответ от сервера: %s", message)
+
+			// Пример задержки между сообщениями
+			time.Sleep(5 * time.Second)
+		}
+
+		// Закрытие соединения перед переподключением
+		conn.Close()
+		log.Println("Соединение с WebSocket сервером закрыто. Переподключение через 5 секунд...")
+		time.Sleep(5 * time.Second) // Ждем перед переподключением
 	}
 }
