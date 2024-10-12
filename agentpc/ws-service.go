@@ -9,8 +9,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WebSocketConnect выполняет подключение к WebSocket-серверу
-func WebSocketAgentConnect(url string, token string) {
+// WebSocketAgent представляет подключение WebSocket
+type WebSocketAgent struct {
+	conn *websocket.Conn
+}
+
+// NewWebSocketAgent создает новое подключение к WebSocket
+func NewWebSocketAgent(url string, token string) (*WebSocketAgent, error) {
 	// Определение протокола для WebSocket
 	if strings.HasPrefix(url, "https://") {
 		url = strings.Replace(url, "https://", "wss://", 1) + "/ws"
@@ -26,19 +31,61 @@ func WebSocketAgentConnect(url string, token string) {
 
 	conn, _, err := websocket.DefaultDialer.Dial(url, headers)
 	if err != nil {
+		return nil, err
+	}
+
+	log.Println("Подключение к WebSocket серверу установлено")
+	return &WebSocketAgent{conn: conn}, nil
+}
+
+// Close закрывает WebSocket соединение
+func (agent *WebSocketAgent) Close() {
+	if agent.conn != nil {
+		agent.conn.Close()
+	}
+}
+
+// SendMessage отправляет сообщение через WebSocket
+func (agent *WebSocketAgent) SendMessage(message string) error {
+	err := agent.conn.WriteMessage(websocket.TextMessage, []byte(message))
+	if err != nil {
+		log.Printf("Ошибка при отправке сообщения: %v", err)
+		return err
+	}
+	return nil
+}
+
+// ReceiveMessages получает сообщения через WebSocket
+func (agent *WebSocketAgent) ReceiveMessages() {
+	for {
+		_, message, err := agent.conn.ReadMessage()
+		if err != nil {
+			log.Printf("Ошибка при получении сообщения: %v", err)
+			break
+		}
+		log.Printf("Получено сообщение от сервера: %s", message)
+	}
+}
+
+// WebSocketAgentConnect выполняет подключение к WebSocket-серверу и обработку сообщений
+func WebSocketAgentConnect(url string, token string) {
+	agent, err := NewWebSocketAgent(url, token)
+	if err != nil {
 		log.Fatalf("Ошибка подключения к WebSocket серверу: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer agent.Close()
 
-	log.Println("Подключение к WebSocket серверу установлено")
+	// Запуск обработчика входящих сообщений в отдельной горутине
+	go agent.ReceiveMessages()
 
+	// Отправка сообщений через интервал
 	for {
-		err = conn.WriteMessage(websocket.TextMessage, []byte("Сообщение от агента"))
+		err := agent.SendMessage("Сообщение от агента")
 		if err != nil {
 			log.Printf("Ошибка при отправке сообщения: %v", err)
 			break
 		}
-		time.Sleep(5 * time.Second) // Примерный интервал между отправками
+		time.Sleep(5 * time.Second) // Интервал между отправками сообщений
 	}
 }
