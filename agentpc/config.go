@@ -16,6 +16,7 @@ type AgentConfig struct {
 	Ports        []int    `json:"ports"`
 	RequestLimit int      `json:"request_limit"`
 	TimeWindow   int      `json:"time_window_ms"`
+	LocalIP      string   // Локальный IP для исключения входящих пакетов с него
 }
 
 type AgentService interface {

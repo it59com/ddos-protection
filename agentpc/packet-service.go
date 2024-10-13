@@ -22,6 +22,12 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 		// Извлечение информации об IP-адресе
 		srcIP := ipLayer.NetworkFlow().Src().String()
 
+		// Исключение пакетов от локального адреса
+		if srcIP == config.LocalIP {
+			log.Printf("Пропуск пакета от локального IP %s\n", srcIP)
+			continue
+		}
+
 		// Проверка протокола и порта
 		if !isAllowedProtocol(packet, config.Protocols) {
 			continue
@@ -56,45 +62,7 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 	}
 }
 
-// Функция для проверки порта
-func isAllowedPort(port int, ports []int) bool {
-	for _, p := range ports {
-		if port == p {
-			return true
-		}
-	}
-	return false
-}
-
-// Проверка IP и порта и блокировка при превышении лимита запросов
-func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
-	ipPortMutex.Lock()
-	defer ipPortMutex.Unlock()
-
-	key := fmt.Sprintf("%s:%d", ip, port)
-	state, exists := ipPortStates[key]
-	if !exists || time.Since(state.lastReset) > time.Duration(config.TimeWindow)*time.Millisecond {
-		// Сброс счётчика при новом IP или по истечении временного окна
-		ipPortStates[key] = &IPPortState{
-			count:     1,
-			lastReset: time.Now(),
-		}
-		log.Printf("Начало отслеживания нового IP %s на порту %d\n", ip, port)
-		return false
-	}
-
-	// Увеличиваем счетчик и проверяем лимит
-	state.count++
-	if state.count > config.RequestLimit {
-		log.Printf("Превышен лимит для IP %s на порту %d. Блокировка...\n", ip, port)
-		delete(ipPortStates, key) // Очистка состояния для данного IP и порта
-		return true
-	}
-
-	return false
-}
-
-// Функция для проверки протокола пакета
+// isAllowedProtocol проверяет, соответствует ли протокол указанным в конфигурации
 func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
 	if transportLayer := packet.TransportLayer(); transportLayer != nil {
 		protocol := transportLayer.LayerType()
@@ -111,5 +79,43 @@ func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
 			}
 		}
 	}
+	return false
+}
+
+// isAllowedPort проверяет, входит ли порт в список разрешенных портов
+func isAllowedPort(port int, ports []int) bool {
+	for _, p := range ports {
+		if port == p {
+			return true
+		}
+	}
+	return false
+}
+
+// checkAndBlockIP проверяет, превышен ли лимит запросов для данного IP и порта
+func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
+	ipPortMutex.Lock()
+	defer ipPortMutex.Unlock()
+
+	key := fmt.Sprintf("%s:%d", ip, port)
+	state, exists := ipPortStates[key]
+	if !exists || time.Since(state.lastReset) > time.Duration(config.TimeWindow)*time.Millisecond {
+		// Сброс счётчика при новом IP или по истечении временного окна
+		ipPortStates[key] = &IPPortState{
+			count:     1,
+			lastReset: time.Now(),
+		}
+		log.Printf("Начало отслеживания нового IP %s на порту %d", ip, port)
+		return false
+	}
+
+	// Увеличиваем счетчик и проверяем лимит
+	state.count++
+	if state.count > config.RequestLimit {
+		log.Printf("Превышен лимит для IP %s на порту %d. Блокировка...", ip, port)
+		delete(ipPortStates, key) // Очистка состояния для данного IP и порта
+		return true
+	}
+
 	return false
 }
