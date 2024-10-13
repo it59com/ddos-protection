@@ -8,7 +8,7 @@ import (
 // CheckIfRepeatAttack проверяет, был ли IP ранее заблокирован для данного пользователя
 func CheckIfRepeatAttack(userID int, ip string) (bool, error) {
 	var count int
-	query := `SELECT COUNT(*) FROM ip_addresses WHERE user_id = ? AND ip = ?`
+	query := `SELECT COUNT(*) FROM ip_addresses WHERE user_id = $1 AND ip = $2`
 	err := DB.QueryRow(query, userID, ip).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("ошибка при проверке повторной атаки: %v", err)
@@ -19,7 +19,7 @@ func CheckIfRepeatAttack(userID int, ip string) (bool, error) {
 // GetRequestCount возвращает количество запросов от определенного IP и порта для указанного пользователя
 func GetRequestCount(userID int, ip, host string, port int) (int, error) {
 	var requestCount int
-	query := `SELECT request_count FROM requests WHERE user_id = ? AND ip = ? AND host = ? AND port = ?`
+	query := `SELECT request_count FROM requests WHERE user_id = $1 AND ip = $2 AND host = $3 AND port = $4`
 	err := DB.QueryRow(query, userID, ip, host, port).Scan(&requestCount)
 	if err != nil {
 		if err == sql.ErrNoRows {

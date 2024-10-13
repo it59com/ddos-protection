@@ -14,8 +14,8 @@ func InitRoutes(router *gin.Engine) {
 	router.POST("/block/:ip", AuthMiddleware(), services.BlockIPHandler)
 
 	// Новый маршрут для получения отчета
-	router.GET("/report/blocks", AuthMiddleware(), services.BlockReportHandler)
-
+	router.GET("/report/blocks", AuthMiddleware(), services.IPWeightReportHandler)
+	router.GET("/docs/report", services.BlockReportHandler)
 	// Документация
 	router.LoadHTMLGlob("templates/*")
 
@@ -30,8 +30,8 @@ func InitRoutes(router *gin.Engine) {
 		c.HTML(http.StatusOK, "block.html", nil)
 	})
 
-	router.GET("/docs/report", AuthMiddleware(), services.IPWeightReportHandler)
 	router.GET("/ws", services.WebSocketHandler) // новый маршрут для WebSocket
 	router.GET("/active_sessions", services.GetActiveSessions)
+	router.DELETE("/user/delete", AuthMiddleware(), services.DeleteUserHandler)
 
 }

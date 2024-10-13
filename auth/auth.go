@@ -13,7 +13,6 @@ import (
 var jwtKey = []byte("your_secret_key") // Замените на более надежный секретный ключ
 
 // Обновленная структура Claims с полем UserID
-
 type Claims struct {
 	UserID int    `json:"user_id"`
 	Email  string `json:"email"`
@@ -39,7 +38,8 @@ func RegisterUser(email, password string) error {
 		return err
 	}
 
-	query := `INSERT INTO users (email, password_hash) VALUES (?, ?);`
+	// Используем синтаксис подстановки параметров PostgreSQL ($1, $2)
+	query := `INSERT INTO users (email, password_hash) VALUES ($1, $2);`
 	_, err = db.DB.Exec(query, email, passwordHash)
 	if err != nil {
 		return fmt.Errorf("ошибка при регистрации пользователя: %w", err)
@@ -49,11 +49,11 @@ func RegisterUser(email, password string) error {
 }
 
 // Функция для логина пользователя
-// auth/auth.go
 func LoginUser(email, password string) (int, string, error) {
 	var userID int
 	var passwordHash string
-	query := `SELECT id, password_hash FROM users WHERE email = ?`
+	// Изменяем синтаксис параметра на PostgreSQL ($1)
+	query := `SELECT id, password_hash FROM users WHERE email = $1`
 	err := db.DB.QueryRow(query, email).Scan(&userID, &passwordHash)
 	if err != nil {
 		return 0, "", errors.New("пользователь не найден")

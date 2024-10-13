@@ -22,7 +22,7 @@ type AgentService interface {
 	LoadConfig(filename string) (*AgentConfig, error)
 	ValidateInterface(interfaceName string) error
 	HandlePackets(packetSource *gopacket.PacketSource, config *AgentConfig)
-	WebSocketConnect(url, token string)
+	WebSocketAgentConnect(url, token string)
 }
 
 var ipPortMutex sync.Mutex

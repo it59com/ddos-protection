@@ -1,7 +1,12 @@
 {
     "database": {
-      "type": "sqlite",
-      "connection": "ddos_protection-n.db"
+      "type": "postgres",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "db": "ddos_protection",
+      "user": "postgres",
+      "password": "your_password",
+      "sslmode": "disable"
     },
     "server": {
       "port": "8080",

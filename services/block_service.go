@@ -12,6 +12,7 @@ import (
 )
 
 // Обработчик блокировки IP-адреса с информацией о порте
+// Обработчик блокировки IP-адреса с информацией о порте
 func BlockIPHandler(c *gin.Context) {
 	ip := c.Param("ip")
 	host := c.ClientIP()
@@ -60,16 +61,32 @@ func BlockIPHandler(c *gin.Context) {
 		return
 	}
 
-	if blocked {
-		// Определяем вес IP с учетом userID и agentName
-		weight, err := CalculateWeight(ip, userID, agentName, requestCount, isRepeatAttack)
-		if err != nil {
-			log.Printf("Ошибка при расчете веса: %v", err)
-		}
+	// Определяем вес для IP конкретного пользователя
+	userWeight, err := CalculateWeight(ip, userID, agentName, requestCount, isRepeatAttack)
+	if err != nil {
+		log.Printf("Ошибка при расчете веса для пользователя: %v", err)
+	}
 
-		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("IP %s заблокирован", ip), "weight": weight})
+	// Получаем общий вес для IP-адреса, учитывая все запросы от всех пользователей
+	totalWeight, err := GetTotalWeightForIP(ip)
+	if err != nil {
+		log.Printf("Ошибка при получении общего веса для IP: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при получении общего веса"})
+		return
+	}
+
+	if blocked {
+		c.JSON(http.StatusOK, gin.H{
+			"message":      fmt.Sprintf("IP %s заблокирован", ip),
+			"user_weight":  userWeight,
+			"total_weight": totalWeight,
+		})
 	} else {
-		c.JSON(http.StatusOK, gin.H{"message": "Запрос зафиксирован"})
+		c.JSON(http.StatusOK, gin.H{
+			"message":      "Запрос зафиксирован",
+			"user_weight":  userWeight,
+			"total_weight": totalWeight,
+		})
 	}
 }
 
@@ -81,8 +98,9 @@ func BlockReportHandler(c *gin.Context) {
 	rows, err := db.DB.Query(`
         SELECT ip, host, request_count, last_request, firewall_source 
         FROM requests 
-        WHERE request_count >= ? 
-		AND user_id = ? 
+        WHERE request_count >= $1 
+		AND user_id = $2  
+		AND deleted_at IS NULL 
         ORDER BY last_request DESC
     `, requestLimit, userID)
 	if err != nil {

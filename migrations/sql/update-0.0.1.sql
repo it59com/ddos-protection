@@ -1,9 +1,1 @@
-CREATE TABLE IF NOT EXISTS ip_weights (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    agent_name TEXT NOT NULL,
-    ip TEXT NOT NULL,
-    weight INTEGER DEFAULT 0,
-    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+ALTER TABLE ip_weights ADD CONSTRAINT unique_user_ip UNIQUE (user_id, ip);

@@ -9,8 +9,13 @@ import (
 // Структура Config для загрузки конфигурации
 type Config struct {
 	Database struct {
-		Type       string `json:"type"`
-		Connection string `json:"connection"`
+		Type     string `json:"type"`
+		Host     string `json:"host"`
+		Port     int    `json:"port"`
+		DB       string `json:"db"`
+		User     string `json:"user"`
+		Password string `json:"password"`
+		SslMode  string `json:"sslmode"`
 	} `json:"database"`
 	Server struct {
 		Port    string `json:"port"`

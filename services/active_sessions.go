@@ -2,6 +2,7 @@ package services
 
 import (
 	"ddos-protection-api/db"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -12,16 +13,16 @@ import (
 func updateSessionStatus(userID int, token string, agentName string, status string) error {
 	query := `
 		INSERT INTO active_sessions (user_id, token, agent_name, status, last_active)
-		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(token) DO UPDATE SET status = ?, last_active = CURRENT_TIMESTAMP
+		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+		ON CONFLICT(token) DO UPDATE SET status = $4, last_active = CURRENT_TIMESTAMP
 	`
-	_, err := db.DB.Exec(query, userID, token, agentName, status, status)
+	_, err := db.DB.Exec(query, userID, token, agentName, status)
 	return err
 }
 
 // Удаление статуса активности при отключении
 func removeSession(token string) error {
-	query := `UPDATE active_sessions SET status = 'offline', last_active = CURRENT_TIMESTAMP WHERE token = ?`
+	query := `UPDATE active_sessions SET status = 'offline', last_active = CURRENT_TIMESTAMP WHERE token = $1`
 	_, err := db.DB.Exec(query, token)
 	return err
 }
@@ -55,4 +56,18 @@ func GetActiveSessions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"active_sessions": sessions})
+}
+
+// UpdateAgentSession обновляет или вставляет сессию агента
+func UpdateAgentSession(userID int, token, agentName string) error {
+	query := `
+		INSERT INTO agent_sessions (user_id, token, agent_name, last_active)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+	`
+	_, err := db.DB.Exec(query, userID, token, agentName)
+	if err != nil {
+		return fmt.Errorf("ошибка при обновлении сессии агента: %w", err)
+	}
+
+	return nil
 }

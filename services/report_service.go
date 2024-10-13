@@ -24,7 +24,7 @@ func GenerateBlockReport(userID, requestLimit int) ([]BlockReport, error) {
 	query := `
         SELECT ip, host, request_count, last_request, firewall_source 
         FROM requests 
-        WHERE request_count >= ? AND user_id = ? 
+        WHERE request_count >= $1 AND user_id = $2 
         ORDER BY last_request DESC`
 
 	rows, err := db.DB.Query(query, requestLimit, userID)
@@ -56,7 +56,8 @@ func IPWeightReportHandler(c *gin.Context) {
 	rows, err := db.DB.Query(`
         SELECT ip, agent_name, weight, last_updated 
         FROM ip_weights 
-        WHERE user_id = ? 
+        WHERE user_id = $1 
+		AND deleted_at IS NULL
         ORDER BY weight DESC
     `, userID)
 	if err != nil {
