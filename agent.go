@@ -74,7 +74,7 @@ func main() {
 		agentpc.HandlePacketsAgent(packetSource, config)
 	}()
 	agentName := config.AgentName
-	go agentpc.WebSocketAgentConnect(config.ServerURL, config.Token, agentName)
+	agentpc.NewWebSocketAgent(config.ServerURL, config.Token, agentName)
 
 	// Запуск WebSocket подключения в отдельной горутине
 

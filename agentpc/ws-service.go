@@ -1,6 +1,7 @@
 package agentpc
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -11,12 +12,14 @@ import (
 
 // WebSocketAgent представляет подключение WebSocket
 type WebSocketAgent struct {
-	conn *websocket.Conn
+	conn      *websocket.Conn
+	url       string
+	token     string
+	agentName string
 }
 
-// NewWebSocketAgent создает новое подключение к WebSocket
-func NewWebSocketAgent(url string, token string) (*WebSocketAgent, error) {
-	// Определение протокола для WebSocket
+// NewWebSocketAgent создает новое подключение WebSocketAgent
+func NewWebSocketAgent(url, token, agentName string) *WebSocketAgent {
 	if strings.HasPrefix(url, "https://") {
 		url = strings.Replace(url, "https://", "wss://", 1) + "/ws"
 	} else if strings.HasPrefix(url, "http://") {
@@ -26,16 +29,74 @@ func NewWebSocketAgent(url string, token string) (*WebSocketAgent, error) {
 	}
 
 	log.Printf("URL для WebSocket: %s", url)
-	headers := http.Header{}
-	headers.Add("Authorization", "Bearer "+token)
 
-	conn, _, err := websocket.DefaultDialer.Dial(url, headers)
-	if err != nil {
-		return nil, err
+	agent := &WebSocketAgent{
+		url:       url,
+		token:     token,
+		agentName: agentName,
 	}
 
-	log.Println("Подключение к WebSocket серверу установлено")
-	return &WebSocketAgent{conn: conn}, nil
+	go agent.Connect() // Запускаем соединение в отдельной горутине
+	return agent
+}
+
+// Connect устанавливает подключение к WebSocket-серверу с автоматическим переподключением
+func (agent *WebSocketAgent) Connect() {
+	headers := http.Header{}
+	headers.Add("Authorization", "Bearer "+agent.token)
+
+	retryDelay := 5 * time.Second
+
+	for {
+		conn, _, err := websocket.DefaultDialer.Dial(agent.url, headers)
+		if err != nil {
+			log.Printf("Ошибка подключения к WebSocket серверу: %v. Повторная попытка через %v...", err, retryDelay)
+			time.Sleep(retryDelay)
+			if retryDelay < 60*time.Second {
+				retryDelay *= 2
+			}
+			continue
+		}
+
+		agent.conn = conn
+		retryDelay = 5 * time.Second
+		log.Println("Подключение к WebSocket серверу установлено")
+
+		// Установка тайм-аутов
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		/*
+
+			conn.SetPongHandler(func(string) error {
+				conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+				return nil
+			})
+		*/
+
+		// Отправка имени агента
+		log.Printf("Отправка имени агента: %s", agent.agentName)
+		err = agent.SendMessage(agent.agentName)
+		if err != nil {
+			log.Printf("Ошибка при отправке имени агента: %v", err)
+			conn.Close()
+			continue
+		}
+
+		// Прослушивание сообщений
+		go agent.ReceiveMessages()
+
+		// Ожидание завершения соединения перед переподключением
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("Соединение закрыто: %v", err)
+				break
+			}
+		}
+
+		conn.Close()
+		log.Println("Соединение с WebSocket сервером закрыто. Переподключение через 5 секунд...")
+		time.Sleep(5 * time.Second)
+	}
 }
 
 // Close закрывает WebSocket соединение
@@ -47,9 +108,13 @@ func (agent *WebSocketAgent) Close() {
 
 // SendMessage отправляет сообщение через WebSocket
 func (agent *WebSocketAgent) SendMessage(message string) error {
+	if agent.conn == nil {
+		return fmt.Errorf("WebSocket соединение не установлено")
+	}
+	agent.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) // Тайм-аут на запись
 	err := agent.conn.WriteMessage(websocket.TextMessage, []byte(message))
 	if err != nil {
-		log.Printf("Ошибка при отправке сообщения: %v", err)
+		log.Printf("WriteMessage: Ошибка при отправке сообщения: %v", err)
 		return err
 	}
 	return nil
@@ -58,71 +123,37 @@ func (agent *WebSocketAgent) SendMessage(message string) error {
 // ReceiveMessages получает сообщения через WebSocket
 func (agent *WebSocketAgent) ReceiveMessages() {
 	for {
-		_, message, err := agent.conn.ReadMessage()
+		//agent.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		messageType, message, err := agent.conn.ReadMessage()
 		if err != nil {
-			log.Printf("Ошибка при получении сообщения: %v", err)
+
+			log.Printf("ReceiveMessages: Ошибка при получении сообщения: %v", err)
 			break
 		}
-		log.Printf("Получено сообщение от сервера: %s", message)
+
+		if messageType == websocket.TextMessage {
+			log.Printf("Получено сообщение от сервера: %s", message)
+			if err := agent.SendMessage(fmt.Sprintf("CONFIRM %s", message)); err != nil {
+				log.Printf("Ошибка при отправке подтверждения: %v", err)
+				break
+			}
+		} else if messageType == websocket.CloseMessage {
+			log.Println("Получено сообщение о закрытии соединения")
+			break
+		}
 	}
 }
 
-// WebSocketAgentConnect выполняет подключение к WebSocket-серверу с переподключением и отправкой AgentName
-func WebSocketAgentConnect(url, token, agentName string) {
-	// Определение протокола для WebSocket
-	if strings.HasPrefix(url, "https://") {
-		url = strings.Replace(url, "https://", "wss://", 1) + "/ws"
-	} else if strings.HasPrefix(url, "http://") {
-		url = strings.Replace(url, "http://", "ws://", 1) + "/ws"
-	} else {
-		url = "ws://" + url + "/ws"
-	}
-
-	headers := http.Header{}
-	headers.Add("Authorization", "Bearer "+token)
-
+// Отправка ping-сообщений
+func (agent *WebSocketAgent) sendPingMessages() {
 	for {
-		conn, _, err := websocket.DefaultDialer.Dial(url, headers)
-		if err != nil {
-			log.Printf("Ошибка подключения к WebSocket серверу: %v. Повторная попытка через 5 секунд...", err)
-			time.Sleep(5 * time.Second)
-			continue
+		time.Sleep(50 * time.Second)
+		if agent.conn == nil {
+			return
 		}
-
-		log.Println("Подключение к WebSocket серверу установлено")
-
-		// Отправка `AgentName` сразу после подключения
-		err = conn.WriteMessage(websocket.TextMessage, []byte(agentName))
-		if err != nil {
-			log.Printf("Ошибка при отправке имени агента: %v", err)
-			conn.Close()
-			time.Sleep(5 * time.Second)
-			continue
+		if err := agent.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			log.Printf("Ошибка при отправке ping: %v", err)
+			return
 		}
-
-		// Обработка сообщений WebSocket
-		for {
-			err := conn.WriteMessage(websocket.TextMessage, []byte("Сообщение от агента"))
-			if err != nil {
-				log.Printf("Ошибка при отправке сообщения: %v", err)
-				break
-			}
-
-			// Чтение ответа от сервера
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("Ошибка при получении сообщения: %v", err)
-				break
-			}
-			log.Printf("Ответ от сервера: %s", message)
-
-			// Пример задержки между сообщениями
-			time.Sleep(5 * time.Second)
-		}
-
-		// Закрытие соединения перед переподключением
-		conn.Close()
-		log.Println("Соединение с WebSocket сервером закрыто. Переподключение через 5 секунд...")
-		time.Sleep(5 * time.Second) // Ждем перед переподключением
 	}
 }

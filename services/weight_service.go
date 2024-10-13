@@ -71,7 +71,7 @@ func UpsertIPWeight(ip string, userID int, agentName string, increment int) erro
 	if err != nil {
 		return fmt.Errorf("UpsertIPWeight: ошибка при обновлении веса IP: %v", err)
 	}
-	log.Printf("UpsertIPWeight: Обновлен IP %s с новым весом %d для пользователя %d", ip, newWeight, userID)
+	//log.Printf("UpsertIPWeight: Обновлен IP %s с новым весом %d для пользователя %d", ip, newWeight, userID)
 	return nil
 }
 
