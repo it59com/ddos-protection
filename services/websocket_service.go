@@ -2,6 +2,7 @@ package services
 
 import (
 	"ddos-protection-api/auth"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -69,12 +70,15 @@ func WebSocketHandler(c *gin.Context) {
 		log.Println("Закрытие WebSocket соединения")
 		conn.Close()
 	}()
+	// Уникальный ключ для хранения сессии агента
+	key := fmt.Sprintf("%d:%s", claims.UserID, token)
 
 	agentConnection := &AgentConnection{
-		conn:           conn,
-		userID:         claims.UserID,
-		blockRules:     make(map[string]bool),
-		weightSent:     make(map[int]bool),
+		conn:       conn,
+		userID:     claims.UserID,
+		blockRules: make(map[string]bool),
+		weightSent: make(map[int]bool),
+
 		confirmChannel: make(map[string]chan bool),
 	}
 
