@@ -1,18 +1,21 @@
 package main
 
 import (
-	"ddos-protection-api/agentpc" // Убедитесь, что здесь указан правильный импорт пакета
+	"ddos-protection-api/agentpc"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/exec"
+	"runtime"
+	"syscall"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
 
-// Чтение конфигурации из файла
 func loadConfigAgent(filename string) (*agentpc.AgentConfig, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -29,7 +32,6 @@ func loadConfigAgent(filename string) (*agentpc.AgentConfig, error) {
 	return config, nil
 }
 
-// validateInterface проверяет, доступен ли указанный интерфейс
 func validateInterfaceAgent(interfaceName string) error {
 	interfaces, err := net.Interfaces()
 	if err != nil {
@@ -41,11 +43,47 @@ func validateInterfaceAgent(interfaceName string) error {
 			return nil
 		}
 	}
-
 	return fmt.Errorf("интерфейс %s не найден", interfaceName)
 }
 
-func main() {
+func setupLogging(logFilePath string) error {
+	if runtime.GOOS == "linux" {
+		logFile, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("не удалось открыть файл для логирования: %w", err)
+		}
+		log.SetOutput(logFile)
+	}
+	return nil
+}
+
+// demonize делает агент фоновым процессом на Linux
+func demonize() error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("не удалось определить путь к исполняемому файлу: %w", err)
+	}
+
+	cmd := exec.Command(exePath, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // Только на Linux
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("не удалось сделать форк: %w", err)
+	}
+
+	os.Exit(0)
+	return nil
+}
+
+func runAgent() {
+	// Настраиваем логирование в файл
+	if err := setupLogging("/var/log/ddos-agent.log"); err != nil {
+		log.Fatalf("Ошибка при настройке логирования: %v", err)
+	}
+
 	// Загружаем конфигурацию
 	config, err := loadConfigAgent("agent.conf")
 	if err != nil {
@@ -64,7 +102,6 @@ func main() {
 	}
 	defer handle.Close()
 
-	// Запуск мониторинга пакетов в отдельной горутине
 	go func() {
 		filter := "tcp or udp"
 		if err := handle.SetBPFFilter(filter); err != nil {
@@ -73,11 +110,23 @@ func main() {
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 		agentpc.HandlePacketsAgent(packetSource, config)
 	}()
-	agentName := config.AgentName
-	agentpc.NewWebSocketAgent(config.ServerURL, config.Token, agentName)
 
-	// Запуск WebSocket подключения в отдельной горутине
-
-	// Блокировка основного потока, чтобы горутины продолжали выполняться
+	agentpc.NewWebSocketAgent(config.ServerURL, config.Token, config.AgentName)
 	select {}
+}
+
+func main() {
+	mode := flag.String("mode", "run", "режим запуска: run или service")
+	flag.Parse()
+
+	if *mode == "service" {
+		if runtime.GOOS == "linux" {
+			if err := demonize(); err != nil {
+				log.Fatalf("Ошибка при демонизации процесса: %v", err)
+			}
+		}
+		runAgent()
+	} else {
+		runAgent()
+	}
 }
