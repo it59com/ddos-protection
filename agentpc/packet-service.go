@@ -21,6 +21,7 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 
 		// Извлечение информации об IP-адресе
 		srcIP := ipLayer.NetworkFlow().Src().String()
+		dstIP := ipLayer.NetworkFlow().Dst().String()
 
 		// Исключение пакетов от локального адреса
 		if srcIP == config.LocalIP {
@@ -39,24 +40,36 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 			continue
 		}
 
-		var srcPort int
+		//var srcPort int
+		var dstPort int
+
 		switch layer := transportLayer.(type) {
 		case *layers.TCP:
-			srcPort = int(layer.SrcPort)
+			//srcPort = int(layer.SrcPort)
+			dstPort = int(layer.DstPort)
 		case *layers.UDP:
-			srcPort = int(layer.SrcPort)
+			//srcPort = int(layer.SrcPort)
+			dstPort = int(layer.DstPort)
 		}
 
-		if !isAllowedPort(srcPort, config.Ports) {
-			continue
+		// Если порты заданы, проверяем только на входящие соединения (исходящие на локальный адрес пропускаем)
+		if len(config.Ports) > 0 {
+			if !isAllowedPort(dstPort, config.Ports) {
+				continue
+			}
+		} else {
+			// Если порты не заданы, проверяем все входящие пакеты
+			if dstIP != config.LocalIP {
+				continue
+			}
 		}
 
 		// Проверка IP и порта, и блокировка при необходимости
-		if checkAndBlockIP(srcIP, srcPort, config) {
-			if err := blockIP(srcIP, srcPort, config); err != nil {
-				log.Printf("Ошибка при блокировке IP %s на порту %d: %v\n", srcIP, srcPort, err)
+		if checkAndBlockIP(srcIP, dstPort, config) {
+			if err := blockIP(srcIP, dstPort, config); err != nil {
+				log.Printf("Ошибка при блокировке IP %s на порту %d: %v\n", srcIP, dstPort, err)
 			} else {
-				log.Printf("IP %s на порту %d успешно заблокирован\n", srcIP, srcPort)
+				log.Printf("IP %s на порту %d успешно заблокирован\n", srcIP, dstPort)
 			}
 		}
 	}
