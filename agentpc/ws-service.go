@@ -10,15 +10,19 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WebSocketAgent представляет подключение WebSocket
+const (
+	ResetColor  = "\033[0m"  // Сброс цвета
+	PurpleColor = "\033[35m" // Ярко фиолетовый цвет
+)
+
 type WebSocketAgent struct {
-	conn      *websocket.Conn
-	url       string
-	token     string
-	agentName string
+	conn             *websocket.Conn
+	url              string
+	token            string
+	agentName        string
+	lastDisconnected time.Time
 }
 
-// NewWebSocketAgent создает новое подключение WebSocketAgent
 func NewWebSocketAgent(url, token, agentName string) *WebSocketAgent {
 	if strings.HasPrefix(url, "https://") {
 		url = strings.Replace(url, "https://", "wss://", 1) + "/ws"
@@ -36,16 +40,16 @@ func NewWebSocketAgent(url, token, agentName string) *WebSocketAgent {
 		agentName: agentName,
 	}
 
-	go agent.Connect() // Запускаем соединение в отдельной горутине
+	go agent.Connect()
 	return agent
 }
 
-// Connect устанавливает подключение к WebSocket-серверу с автоматическим переподключением
 func (agent *WebSocketAgent) Connect() {
 	headers := http.Header{}
 	headers.Add("Authorization", "Bearer "+agent.token)
 
 	retryDelay := 5 * time.Second
+	firstConnection := true
 
 	for {
 		conn, _, err := websocket.DefaultDialer.Dial(agent.url, headers)
@@ -60,20 +64,18 @@ func (agent *WebSocketAgent) Connect() {
 
 		agent.conn = conn
 		retryDelay = 5 * time.Second
-		log.Println("Подключение к WebSocket серверу установлено")
-
-		// Установка тайм-аутов
-		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		/*
-
-			conn.SetPongHandler(func(string) error {
-				conn.SetReadDeadline(time.Now().Add(120 * time.Second))
-				return nil
-			})
-		*/
+		if firstConnection {
+			log.Println(PurpleColor + "WS-AGENT: Первое установление соединения с WebSocket сервером" + ResetColor)
+			firstConnection = false
+		} else {
+			disconnectedDuration := time.Since(agent.lastDisconnected)
+			log.Printf(PurpleColor+"Соединение с WebSocket сервером восстановлено после %v"+ResetColor, disconnectedDuration)
+			agent.OnReconnect(disconnectedDuration)
+		}
+		log.Println(PurpleColor + "WS-AGENT: Подключение к WebSocket серверу установлено" + ResetColor)
 
 		// Отправка имени агента
-		log.Printf("Отправка имени агента: %s", agent.agentName)
+		log.Printf(PurpleColor+"Отправка имени агента: %s"+ResetColor, agent.agentName)
 		err = agent.SendMessage(agent.agentName)
 		if err != nil {
 			log.Printf("Ошибка при отправке имени агента: %v", err)
@@ -82,78 +84,64 @@ func (agent *WebSocketAgent) Connect() {
 		}
 
 		// Прослушивание сообщений
-		go agent.ReceiveMessages()
+		agent.ReceiveMessages()
 
-		// Ожидание завершения соединения перед переподключением
-		for {
-			_, _, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("Соединение закрыто: %v", err)
-				break
-			}
-		}
-
-		conn.Close()
-		log.Println("Соединение с WebSocket сервером закрыто. Переподключение через 5 секунд...")
+		agent.conn.Close()
+		agent.lastDisconnected = time.Now()
+		log.Println("WS-AGENT: Соединение с WebSocket сервером закрыто. Переподключение через 5 секунд...")
 		time.Sleep(5 * time.Second)
 	}
 }
 
-// Close закрывает WebSocket соединение
-func (agent *WebSocketAgent) Close() {
-	if agent.conn != nil {
-		agent.conn.Close()
-	}
+// OnReconnect вызывается после восстановления соединения
+func (agent *WebSocketAgent) OnReconnect(disconnectedDuration time.Duration) {
+	log.Printf(PurpleColor+"Метод OnReconnect вызван. Время отсутствия связи: %v"+ResetColor, disconnectedDuration)
 }
 
-// SendMessage отправляет сообщение через WebSocket
 func (agent *WebSocketAgent) SendMessage(message string) error {
 	if agent.conn == nil {
-		return fmt.Errorf("WebSocket соединение не установлено")
+		return fmt.Errorf(PurpleColor + "WS-AGENT: WebSocket соединение не установлено" + ResetColor)
 	}
-	agent.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) // Тайм-аут на запись
+	agent.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	err := agent.conn.WriteMessage(websocket.TextMessage, []byte(message))
 	if err != nil {
-		log.Printf("WriteMessage: Ошибка при отправке сообщения: %v", err)
+		log.Printf("WS-AGENT: Ошибка при отправке сообщения: %v", err)
 		return err
 	}
 	return nil
 }
 
-// ReceiveMessages получает сообщения через WebSocket
 func (agent *WebSocketAgent) ReceiveMessages() {
 	for {
-		//agent.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		messageType, message, err := agent.conn.ReadMessage()
 		if err != nil {
-
-			log.Printf("ReceiveMessages: Ошибка при получении сообщения: %v", err)
+			log.Printf("WS-AGENT: Ошибка при получении сообщения: %v", err)
 			break
 		}
 
 		if messageType == websocket.TextMessage {
-			log.Printf("Получено сообщение от сервера: %s", message)
+			log.Printf(PurpleColor+"WS-AGENT: Получено сообщение от сервера: %s"+ResetColor, message)
 			if err := agent.SendMessage(fmt.Sprintf("CONFIRM %s", message)); err != nil {
-				log.Printf("Ошибка при отправке подтверждения: %v", err)
+				log.Printf("WS-AGENT: Ошибка при отправке подтверждения: %v", err)
 				break
 			}
 		} else if messageType == websocket.CloseMessage {
-			log.Println("Получено сообщение о закрытии соединения")
+			log.Println("WS-AGENT: Получено сообщение о закрытии соединения")
 			break
 		}
 	}
 }
 
-// Отправка ping-сообщений
-func (agent *WebSocketAgent) sendPingMessages() {
-	for {
-		time.Sleep(50 * time.Second)
-		if agent.conn == nil {
-			return
-		}
-		if err := agent.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-			log.Printf("Ошибка при отправке ping: %v", err)
-			return
+// Проверяет текущее состояние WebSocket соединения для конкретного агента
+func (agent *WebSocketAgent) checkWebsocketAgent(userID int) {
+	if agent.conn == nil {
+		log.Printf(PurpleColor+"WS-AGENT: Соединение для пользователя %d не установлено."+ResetColor, userID)
+	} else {
+		err := agent.conn.WriteMessage(websocket.PingMessage, nil)
+		if err != nil {
+			log.Printf(PurpleColor+"WS-AGENT: Ошибка при проверке активности соединения для пользователя %d: %v"+ResetColor, userID, err)
+		} else {
+			log.Printf(PurpleColor+"WS-AGENT: Соединение для пользователя %d активно."+ResetColor, userID)
 		}
 	}
 }

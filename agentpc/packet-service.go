@@ -49,6 +49,8 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 		if checkAndBlockIP(srcIP, srcPort, config) {
 			if err := blockIP(srcIP, srcPort, config); err != nil {
 				log.Printf("Ошибка при блокировке IP %s на порту %d: %v\n", srcIP, srcPort, err)
+			} else {
+				log.Printf("IP %s на порту %d успешно заблокирован\n", srcIP, srcPort)
 			}
 		}
 	}
@@ -77,12 +79,14 @@ func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
 			count:     1,
 			lastReset: time.Now(),
 		}
+		log.Printf("Начало отслеживания нового IP %s на порту %d\n", ip, port)
 		return false
 	}
 
 	// Увеличиваем счетчик и проверяем лимит
 	state.count++
 	if state.count > config.RequestLimit {
+		log.Printf("Превышен лимит для IP %s на порту %d. Блокировка...\n", ip, port)
 		delete(ipPortStates, key) // Очистка состояния для данного IP и порта
 		return true
 	}

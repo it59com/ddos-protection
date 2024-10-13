@@ -5,6 +5,8 @@ import (
 	"ddos-protection-api/db"
 	"log"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // Функция для запуска фоновой службы
@@ -19,8 +21,32 @@ func StartBackgroundService() {
 			if err != nil {
 				log.Printf("Ошибка при уменьшении веса неактивных IP: %v", err)
 			}
+
+			checkActiveWebSocketSessions()
 		}
 	}()
+}
+
+func checkActiveWebSocketSessions() {
+	agentsMu.RLock()
+	defer agentsMu.RUnlock()
+
+	for userID, agentConn := range agents {
+		err := agentConn.conn.WriteMessage(websocket.PingMessage, nil)
+		if err != nil {
+			log.Printf("Проблема с WebSocket соединением для пользователя %d: %v. Закрытие соединения...", userID, err)
+			// Закрываем соединение и удаляем агента, так как он неактивен
+			agentConn.conn.Close()
+
+			agentsMu.Lock()
+			delete(agents, userID)
+			agentsMu.Unlock()
+
+			log.Printf("Соединение для пользователя %d закрыто и удалено.", userID)
+		} else {
+			log.Printf("WebSocket соединение для пользователя %d активно.", userID)
+		}
+	}
 }
 
 // Функция для уменьшения веса IP-адресов при отсутствии активности
@@ -97,6 +123,7 @@ func reduceInactiveIPWeights() error {
 		} else {
 			//log.Printf("Вес для IP %s уменьшен до %d", ip, newWeight)
 		}
+
 	}
 
 	// Логируем итоговую информацию после завершения цикла
