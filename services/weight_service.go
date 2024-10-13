@@ -14,11 +14,11 @@ func CalculateWeight(ip string, userID int, agentName string, requestCount int, 
 
 	// Повышение веса за частоту запросов
 	if requestCount > 100 {
-		weight += 5
+		weight += 15
 	} else if requestCount > 50 {
-		weight += 3
+		weight += 7
 	} else {
-		weight += 1
+		weight += 3
 	}
 
 	// Увеличение веса, если атака повторяется

@@ -25,6 +25,9 @@ func main() {
 	// Инициализируем Redis
 	services.InitRedis()
 
+	// Запуск фоновой службы для снижения веса IP-адресов
+	services.StartBackgroundService()
+
 	// Настройка роутов Gin
 	r := gin.Default()
 	routes.InitRoutes(r)
