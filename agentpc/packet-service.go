@@ -10,7 +10,6 @@ import (
 	"github.com/google/gopacket/layers"
 )
 
-// Функция для обработки пакетов
 func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig) {
 	for packet := range packetSource.Packets() {
 		// Извлечение IP слоя
@@ -23,13 +22,12 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 		srcIP := ipLayer.NetworkFlow().Src().String()
 		dstIP := ipLayer.NetworkFlow().Dst().String()
 
-		// Исключение пакетов от локального адреса
-		if srcIP == config.LocalIP {
-			log.Printf("Пропуск пакета от локального IP %s\n", srcIP)
+		// Пропускаем пакеты, отправленные от локального IP
+		if dstIP == config.LocalIP {
 			continue
 		}
 
-		// Проверка протокола и порта
+		// Проверка протокола
 		if !isAllowedProtocol(packet, config.Protocols) {
 			continue
 		}
@@ -52,19 +50,12 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 			dstPort = int(layer.DstPort)
 		}
 
-		// Если порты заданы, проверяем только на входящие соединения (исходящие на локальный адрес пропускаем)
-		if len(config.Ports) > 0 {
-			if !isAllowedPort(dstPort, config.Ports) {
-				continue
-			}
-		} else {
-			// Если порты не заданы, проверяем все входящие пакеты
-			if dstIP != config.LocalIP {
-				continue
-			}
+		// Если задан список портов, проверяем только входящие пакеты на эти порты
+		if len(config.Ports) > 0 && !isAllowedPort(dstPort, config.Ports) {
+			continue
 		}
 
-		// Проверка IP и порта, и блокировка при необходимости
+		// Проверка количества запросов от `srcIP` к `dstPort`, и при необходимости отправка на блокировку
 		if checkAndBlockIP(srcIP, dstPort, config) {
 			if err := blockIP(srcIP, dstPort, config); err != nil {
 				log.Printf("Ошибка при блокировке IP %s на порту %d: %v\n", srcIP, dstPort, err)
@@ -75,7 +66,6 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 	}
 }
 
-// isAllowedProtocol проверяет, соответствует ли протокол указанным в конфигурации
 func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
 	if transportLayer := packet.TransportLayer(); transportLayer != nil {
 		protocol := transportLayer.LayerType()
@@ -95,7 +85,6 @@ func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
 	return false
 }
 
-// isAllowedPort проверяет, входит ли порт в список разрешенных портов
 func isAllowedPort(port int, ports []int) bool {
 	for _, p := range ports {
 		if port == p {
@@ -105,15 +94,14 @@ func isAllowedPort(port int, ports []int) bool {
 	return false
 }
 
-// checkAndBlockIP проверяет, превышен ли лимит запросов для данного IP и порта
 func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
 	ipPortMutex.Lock()
 	defer ipPortMutex.Unlock()
 
 	key := fmt.Sprintf("%s:%d", ip, port)
 	state, exists := ipPortStates[key]
+
 	if !exists || time.Since(state.lastReset) > time.Duration(config.TimeWindow)*time.Millisecond {
-		// Сброс счётчика при новом IP или по истечении временного окна
 		ipPortStates[key] = &IPPortState{
 			count:     1,
 			lastReset: time.Now(),
@@ -122,12 +110,14 @@ func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
 		return false
 	}
 
-	// Увеличиваем счетчик и проверяем лимит
 	state.count++
+
 	if state.count > config.RequestLimit {
 		log.Printf("Превышен лимит для IP %s на порту %d. Блокировка...", ip, port)
-		delete(ipPortStates, key) // Очистка состояния для данного IP и порта
+		delete(ipPortStates, key) // Удаление записи после блокировки
 		return true
+	} else {
+		log.Printf("Отслеживание IP %s на порту %d: текущее количество запросов %d", ip, port, state.count)
 	}
 
 	return false
