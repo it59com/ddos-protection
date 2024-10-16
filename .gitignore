@@ -7,3 +7,5 @@ main
 update
 config.json
 agent.conf
+*.zip
+./build/*

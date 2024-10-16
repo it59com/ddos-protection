@@ -121,10 +121,14 @@ func (agent *WebSocketAgent) ReceiveMessages() {
 
 		if messageType == websocket.TextMessage {
 			log.Printf(PurpleColor+"WS-AGENT: Получено сообщение от сервера: %s"+ResetColor, message)
-			if err := agent.SendMessage(fmt.Sprintf("CONFIRM %s", message)); err != nil {
-				log.Printf("WS-AGENT: Ошибка при отправке подтверждения: %v", err)
-				break
-			}
+			/*
+				if err := agent.SendMessage(fmt.Sprintf("CONFIRM %s", message)); err != nil {
+					log.Printf("WS-AGENT: Ошибка при отправке подтверждения: %v", err)
+					break
+				} else {
+
+				}
+			*/
 		} else if messageType == websocket.CloseMessage {
 			log.Println("WS-AGENT: Получено сообщение о закрытии соединения")
 			break

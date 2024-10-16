@@ -1,1 +1,1 @@
-ALTER TABLE ip_weights ADD CONSTRAINT unique_user_ip UNIQUE (user_id, ip);
+ALTER TABLE ip_weights ADD COLUMN low_weight_notified BOOLEAN DEFAULT FALSE;

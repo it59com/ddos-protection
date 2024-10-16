@@ -49,19 +49,30 @@ func checkActiveWebSocketSessions() {
 	}
 }
 
+// contains проверяет, содержится ли элемент в массиве
+func contains(arr []int, item int) bool {
+	for _, v := range arr {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
 // Функция для уменьшения веса IP-адресов при отсутствии активности
 func reduceInactiveIPWeights() error {
-	// Время, после которого начинается уменьшение веса (10 минут)
+	// Время, после которого начинается уменьшение веса (3 минуты)
 	inactivityThreshold := time.Now().Add(-3 * time.Minute)
-	// Время, за которое вес должен быть снижен до 20 (1 час)
-	// Минимальный вес, до которого уменьшается значение (20)
-	const minWeight = 10                    // Минимальный вес, ниже которого IP не может быть уменьшен
-	const maxWeight = 100                   // Максимально допустимый вес для типа integer в PostgreSQL
-	const fullReductionTime = 1 * time.Hour // Полное время уменьшения веса
+	// Полное время уменьшения веса (1 час)
+	const fullReductionTime = 1 * time.Hour
+	// Шаг уменьшения веса
+	const reductionStep = 10
+	const minWeight = 10
+	const maxWeight = 100
 
-	// Выбираем все IP-адреса, которые неактивны дольше 10 минут
+	// Выбираем все IP-адреса, которые неактивны дольше 3 минут и имеют вес больше минимального
 	query := `
-		SELECT user_id, ip, weight, last_updated
+		SELECT user_id, ip, weight, last_updated, low_weight_notified
 		FROM ip_weights
 		WHERE last_updated < $1 AND weight > $2
 	`
@@ -71,68 +82,82 @@ func reduceInactiveIPWeights() error {
 	}
 	defer rows.Close()
 	rowCount := 0 // Счетчик строк
-	// Перебираем все найденные записи
 
+	activeSessions, err := GetActiveSessions()
+	if err != nil {
+		log.Printf("Ошибка при получении активных сессий: %v", err)
+		activeSessions = []map[string]interface{}{} // Если ошибка, работаем с пустым списком
+	}
+
+	// Перебираем все найденные записи
 	for rows.Next() {
 		var userID int
 		var ip string
 		var weight int
 		var lastUpdated time.Time
+		var lowWeightNotified bool
 
-		// Сканыруем строку и проверяем ошибки
-		err := rows.Scan(&userID, &ip, &weight, &lastUpdated)
+		// Сканируем строку и проверяем ошибки
+		err := rows.Scan(&userID, &ip, &weight, &lastUpdated, &lowWeightNotified)
 		if err != nil {
 			log.Printf("Ошибка при обработке строки: %v", err)
 			continue
 		}
 
-		// Увеличиваем счетчик строк
-		rowCount++
-
-		// Вызов CalculateWeight и дальнейшая логика работы с weight и lastUpdated
-		currentWeight, err := CalculateWeight(ip, userID, "", weight, false) // Убедитесь, что передаются необходимые параметры
-		if err != nil {
-			log.Printf("Ошибка при расчете текущего веса для IP %s: %v", ip, err)
-			continue
-		}
-
 		// Рассчитываем время с момента последнего обновления
 		timeSinceLastUpdate := time.Since(lastUpdated)
-
-		// Рассчитываем коэффициент уменьшения веса
-		reductionRatio := float64(timeSinceLastUpdate) / float64(fullReductionTime)
-		if reductionRatio > 1 {
-			reductionRatio = 1 // Ограничение, чтобы не снижалось ниже минимального веса
+		// Расчет количества шагов уменьшения, в зависимости от времени без активности
+		reductionFactor := int(timeSinceLastUpdate / fullReductionTime * reductionStep)
+		if reductionFactor < 1 {
+			reductionFactor = 1
 		}
 
-		// Новый вес с учетом уменьшения
-		newWeight := currentWeight - int(float64(currentWeight-minWeight)*reductionRatio)
+		// Новый вес с учетом постепенного уменьшения
+		newWeight := weight - reductionFactor
 		if newWeight < minWeight {
 			newWeight = minWeight
 		}
 
-		// Обновляем вес IP в базе данных
+		// Проверка на наличие активных сессий и отправка уведомления об уменьшении веса
+		if newWeight <= 20 && !lowWeightNotified {
+			if containsSession(activeSessions, userID) && newWeight == 20 {
+				err := NotifyAgentLowWeight(ip, userID, newWeight)
+
+				if err != nil {
+					log.Printf("Ошибка при отправке уведомления об уменьшении веса: %v", err)
+				} else {
+					// Устанавливаем флаг отправки уведомления
+					lowWeightNotified = true
+				}
+			}
+		}
+
+		// Обновляем вес IP и статус уведомления о низком весе в базе данных
 		updateQuery := `
 			UPDATE ip_weights
-			SET weight = $1, last_updated = CURRENT_TIMESTAMP
-			WHERE user_id = $2 AND ip = $3
+			SET weight = $1, last_updated = CURRENT_TIMESTAMP, low_weight_notified = $2
+			WHERE user_id = $3 AND ip = $4
 		`
-		_, err = db.DB.Exec(updateQuery, newWeight, userID, ip)
+		_, err = db.DB.Exec(updateQuery, newWeight, lowWeightNotified, userID, ip)
 		if err != nil {
 			log.Printf("Ошибка при обновлении веса %d для IP %s: %v", newWeight, ip, err)
 		} else {
-			//log.Printf("Вес для IP %s уменьшен до %d", ip, newWeight)
+			log.Printf("Вес для IP %s уменьшен до %d", ip, newWeight)
 		}
 
+		rowCount++
 	}
 
-	// Логируем итоговую информацию после завершения цикла
 	log.Printf("Обработано строк: %d", rowCount)
-	if rowCount > 0 {
-		log.Printf("Обновлено %d строк с уменьшением веса", rowCount)
-	} else {
-		log.Println("Не найдено строк для обработки")
-	}
-
 	return nil
+}
+
+// Функция проверки наличия активной сессии
+func containsSession(sessions []map[string]interface{}, userID int) bool {
+	for _, session := range sessions {
+		if sessionUserID, ok := session["user_id"].(int); ok && sessionUserID == userID {
+			return true
+		}
+	}
+	return false
 }

@@ -2,10 +2,13 @@ package services
 
 import (
 	"ddos-protection-api/auth"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -25,6 +28,12 @@ type AgentConnection struct {
 	blockRules     map[string]bool
 	weightSent     map[int]bool
 	confirmChannel map[string]chan bool
+}
+
+type Notification struct {
+	IPAddress     string `json:"ip_address"`
+	BlockTime     string `json:"block_time"`
+	CurrentWeight int    `json:"weight"`
 }
 
 var agents = make(map[int]*AgentConnection)
@@ -102,7 +111,7 @@ func WebSocketHandler(c *gin.Context) {
 	log.Printf("Агент %s подключен для пользователя %d", agentConnection.agentName, claims.UserID)
 
 	// Отправляем приветственное сообщение агенту после подключения
-	if err := agentConnection.SendMessage("Привет от сервера!"); err != nil {
+	if err := agentConnection.SendMessage("server-ok"); err != nil {
 		log.Printf("Не удалось отправить приветственное сообщение агенту %s", agentConnection.agentName)
 	}
 
@@ -117,4 +126,104 @@ func WebSocketHandler(c *gin.Context) {
 		// Обрабатываем полученные данные
 		log.Printf("Получено сообщение: %s", message)
 	}
+}
+
+func NotifyAgent(ip string, userID int, weight int) error {
+	agentsMu.RLock()
+	defer agentsMu.RUnlock()
+
+	agent, exists := agents[userID]
+	if !exists {
+		return fmt.Errorf("агент не найден для пользователя %d", userID)
+	}
+
+	notification := Notification{
+		IPAddress:     ip,
+		BlockTime:     time.Now().Format(time.RFC3339),
+		CurrentWeight: weight,
+	}
+	message, err := json.Marshal(notification)
+	if err != nil {
+		return fmt.Errorf("ошибка при кодировании JSON: %v", err)
+	}
+
+	err = agent.SendMessage(string(message))
+	if err != nil {
+		log.Printf("Ошибка при отправке уведомления: %v", err)
+		return err
+	}
+
+	log.Printf("Отправлено уведомление агенту: %s", message)
+	return nil
+}
+
+// Обновленный метод для проверки активной сессии перед отправкой уведомления
+func NotifyAgentLowWeight(ip string, userID int, weight int) error {
+	agentsMu.RLock()
+	agent, exists := agents[userID]
+	agentsMu.RUnlock()
+
+	if !exists {
+		log.Printf("Активный агент не найден для пользователя %d", userID)
+		return fmt.Errorf("активный агент не найден")
+	}
+
+	if err := agent.SendLowWeightNotification(ip, weight); err != nil {
+		log.Printf("Ошибка при отправке уведомления для агента пользователя %d: %v", userID, err)
+		return err
+	}
+
+	return nil
+}
+
+// NotifyAgentWeightDrop - отправляет сообщение о падении веса
+func NotifyAgentWeightDrop(ip string, userID int, weight int) {
+	agentsMu.RLock()
+	defer agentsMu.RUnlock()
+
+	agent, ok := agents[userID]
+	if ok && weight <= 20 {
+		msg := fmt.Sprintf(`{"type": "weight_drop", "ip": "%s", "weight": %d}`, ip, weight)
+		if err := agent.SendMessage(msg); err != nil {
+			log.Printf("Ошибка отправки сообщения о снижении веса через WebSocket для пользователя %d: %v", userID, err)
+		} else {
+			log.Printf("Сообщение о снижении веса отправлено агенту пользователя %d для IP %s", userID, ip)
+		}
+	}
+}
+
+func updateAgentSession(agent *AgentConnection, userID int) {
+	agentsMu.Lock()
+	defer agentsMu.Unlock()
+
+	agentSession := agents[userID]
+	if agentSession != nil {
+		// Обновление времени последней активности
+		agentSession.blockRules = agent.blockRules
+		agentSession.weightSent = agent.weightSent
+		agentSession.confirmChannel = agent.confirmChannel
+	}
+}
+
+// Метод для отправки сообщения об уменьшении веса
+func (a *AgentConnection) SendLowWeightNotification(ip string, weight int) error {
+	message := map[string]interface{}{
+		"type":      "low_weight_warning",
+		"ip":        ip,
+		"weight":    weight,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	data, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("ошибка при маршалинге JSON сообщения: %v", err)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return fmt.Errorf("ошибка при отправке уведомления о низком весе: %v", err)
+	}
+
+	log.Printf("Отправлено уведомление о низком весе для IP %s с весом %d", ip, weight)
+	return nil
 }

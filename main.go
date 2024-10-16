@@ -11,9 +11,9 @@ import (
 // Параметры для службы
 const (
 	serviceName = "ddos-api-server"
-	execFile    = "./server_api.go"
-	agentFile   = "agent.go"
-	updateFile  = "update.go"
+	serverFile  = "server/server_api"
+	agentFile   = "agent/agent.go"
+	updateFile  = "update/update.go"
 )
 
 // Основная функция
@@ -34,7 +34,7 @@ func main() {
 	case "update":
 		updateAgent()
 	case "build":
-		buildAgent()
+		buildAll()
 	default:
 		fmt.Println("Неизвестная команда:", command)
 		fmt.Println("Использование: main.go {start|stop|status|update|build}")
@@ -43,17 +43,7 @@ func main() {
 
 // Функция для запуска службы
 func startService() {
-	// Компилируем файл server_api.go в исполняемый файл server_api
-	buildCmd := exec.Command("go", "build", "-o", "server_api", execFile)
-	buildCmd.Stdout = os.Stdout
-	buildCmd.Stderr = os.Stderr
-
-	if err := buildCmd.Run(); err != nil {
-		log.Fatalf("Ошибка при компиляции сервера API: %v", err)
-	}
-
-	// Запускаем полученный исполняемый файл server_api
-	cmd := exec.Command("./server_api")
+	cmd := exec.Command("./server/server")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -67,8 +57,8 @@ func startService() {
 
 // Функция для остановки службы
 func stopService() {
-	// Остановка всех процессов с именем execFile
-	out, err := exec.Command("pkill", "-f", execFile).CombinedOutput()
+	// Остановка всех процессов с именем server_api
+	out, err := exec.Command("pkill", "-f", "server_api").CombinedOutput()
 	if err != nil {
 		log.Printf("Ошибка при остановке сервера API: %v", err)
 		fmt.Println(string(out))
@@ -80,8 +70,7 @@ func stopService() {
 
 // Функция для проверки статуса службы
 func statusService() {
-	// Поиск процесса сервера API
-	out, err := exec.Command("pgrep", "-fl", execFile).CombinedOutput()
+	out, err := exec.Command("pgrep", "-fl", "server_api").CombinedOutput()
 	if err != nil || len(out) == 0 {
 		fmt.Println("Сервер API не запущен.")
 	} else {
@@ -92,7 +81,7 @@ func statusService() {
 // Функция для обновления агента
 func updateAgent() {
 	fmt.Println("Запуск обновления агента...")
-	cmd := exec.Command("go", "run", updateFile)
+	cmd := exec.Command("./update/update")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -103,18 +92,28 @@ func updateAgent() {
 	fmt.Println("Обновление агента завершено.")
 }
 
-// Функция для сборки агента в релиз
-func buildAgent() {
-	fmt.Println("Сборка агента...")
-
-	// Компиляция агентского файла
-	cmd := exec.Command("go", "build", "-o", agentFile, "agent.go")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		log.Fatalf("Ошибка при сборке агента: %v", err)
+// Функция для сборки всех исполняемых файлов
+func buildAll() {
+	// Приведите сборку к тому виду, который отражает фактические имена и пути к файлам
+	filesToBuild := map[string]string{
+		"./server/server": "server/server.go", // путь к исходному коду и место, где вы хотите собрать исполняемый файл
+		"./agent/agent":   "agent/agent.go",   // аналогично для агента
+		//"./update/update":     "update/update.go", // аналогично для update
 	}
 
-	fmt.Printf("Сборка завершена. Исполняемый файл: %s\n", agentFile)
+	for outputFile, sourceFile := range filesToBuild {
+		fmt.Printf("Сборка %s из %s...\n", outputFile, sourceFile)
+
+		cmd := exec.Command("go", "build", "-o", outputFile, sourceFile)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("Ошибка при сборке %s: %v", outputFile, err)
+		}
+
+		fmt.Printf("Сборка завершена: %s\n", outputFile)
+	}
+
+	fmt.Println("Все файлы успешно собраны.")
 }

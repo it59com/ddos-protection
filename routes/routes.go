@@ -31,7 +31,7 @@ func InitRoutes(router *gin.Engine) {
 	})
 
 	router.GET("/ws", services.WebSocketHandler) // новый маршрут для WebSocket
-	router.GET("/active_sessions", services.GetActiveSessions)
+	router.GET("/active_sessions", services.GetActiveSessionsHandler)
 	router.DELETE("/user/delete", AuthMiddleware(), services.DeleteUserHandler)
 
 }

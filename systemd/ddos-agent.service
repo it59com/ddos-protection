@@ -1,0 +1,12 @@
+[Unit]
+Description=DDOS Protection Agent
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/ddos-agent
+Restart=always
+User=root
+EnvironmentFile=/etc/ddos-protection/agent.conf
+
+[Install]
+WantedBy=multi-user.target

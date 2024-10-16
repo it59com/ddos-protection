@@ -1,0 +1,12 @@
+[Unit]
+Description=DDOS Protection Server
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/ddos-server
+Restart=always
+User=root
+EnvironmentFile=/etc/ddos-protection/server.conf
+
+[Install]
+WantedBy=multi-user.target

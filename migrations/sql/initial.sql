@@ -70,5 +70,7 @@ CREATE TABLE IF NOT EXISTS ip_weights (
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP,
+    low_weight_notified BOOLEAN DEFAULT FALSE,
+    notified BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

@@ -7,6 +7,8 @@ import (
 	"log"
 )
 
+var notifiedIPs = make(map[string]bool)
+
 // CalculateWeight - функция для расчета веса IP с учетом userID и agentName
 func CalculateWeight(ip string, userID int, agentName string, requestCount int, repeatAttack bool) (int, error) {
 	// Начальный вес
@@ -43,15 +45,16 @@ func CalculateWeight(ip string, userID int, agentName string, requestCount int, 
 // UpsertIPWeight - функция для добавления или обновления веса IP-адреса
 func UpsertIPWeight(ip string, userID int, agentName string, increment int) error {
 	var currentWeight int
+	var notified bool
 
-	// Проверяем текущий вес IP в таблице
-	query := `SELECT weight FROM ip_weights WHERE user_id = $1 AND ip = $2`
-	err := db.DB.QueryRow(query, userID, ip).Scan(&currentWeight)
+	// Проверяем текущий вес IP и статус уведомления в таблице
+	query := `SELECT weight, notified FROM ip_weights WHERE user_id = $1 AND ip = $2`
+	err := db.DB.QueryRow(query, userID, ip).Scan(&currentWeight, &notified)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Если IP не найден, добавляем новую запись
-			query = `INSERT INTO ip_weights (user_id, agent_name, ip, weight, last_updated) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`
-			_, err = db.DB.Exec(query, userID, agentName, ip, increment)
+			query = `INSERT INTO ip_weights (user_id, agent_name, ip, weight, notified, last_updated) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`
+			_, err = db.DB.Exec(query, userID, agentName, ip, increment, false)
 			if err != nil {
 				return fmt.Errorf("UpsertIPWeight: ошибка при добавлении нового IP в ip_weights: %v", err)
 			}
@@ -63,15 +66,24 @@ func UpsertIPWeight(ip string, userID int, agentName string, increment int) erro
 
 	// Если IP уже существует, увеличиваем вес
 	newWeight := currentWeight + increment
-	if newWeight > 100 {
-		newWeight = 100
+
+	// Проверка и отправка уведомления, если достигнут вес 100
+	if newWeight >= 100 && !notifiedIPs[ip] {
+		NotifyAgent(ip, userID, newWeight)
+		notifiedIPs[ip] = true
 	}
-	query = `UPDATE ip_weights SET weight = $1, last_updated = CURRENT_TIMESTAMP WHERE ip = $2 AND user_id = $3`
-	_, err = db.DB.Exec(query, newWeight, ip, userID)
+	if newWeight == 20 && !notifiedIPs[ip] {
+		NotifyAgentWeightDrop(ip, userID, newWeight)
+		notifiedIPs[ip] = true
+	}
+
+	// Обновляем данные в таблице
+	query = `UPDATE ip_weights SET weight = $1, notified = $2, last_updated = CURRENT_TIMESTAMP WHERE ip = $3 AND user_id = $4`
+	_, err = db.DB.Exec(query, newWeight, notified, ip, userID)
 	if err != nil {
 		return fmt.Errorf("UpsertIPWeight: ошибка при обновлении веса IP: %v", err)
 	}
-	//log.Printf("UpsertIPWeight: Обновлен IP %s с новым весом %d для пользователя %d", ip, newWeight, userID)
+
 	return nil
 }
 

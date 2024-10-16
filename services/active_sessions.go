@@ -28,11 +28,15 @@ func removeSession(token string) error {
 }
 
 // GetActiveSessions возвращает список активных сессий
-func GetActiveSessions(c *gin.Context) {
-	rows, err := db.DB.Query("SELECT user_id, agent_name, status, last_active FROM active_sessions WHERE status = 'online'")
+func GetActiveSessions() ([]map[string]interface{}, error) {
+	query := `
+		SELECT user_id, agent_name, status, last_active 
+		FROM active_sessions 
+		WHERE status = 'online' AND deleted_at IS NULL
+	`
+	rows, err := db.DB.Query(query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при получении активных сессий"})
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -43,8 +47,7 @@ func GetActiveSessions(c *gin.Context) {
 		var lastActive time.Time
 
 		if err := rows.Scan(&userID, &agentName, &status, &lastActive); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при обработке данных сессий"})
-			return
+			return nil, err
 		}
 
 		sessions = append(sessions, map[string]interface{}{
@@ -53,6 +56,17 @@ func GetActiveSessions(c *gin.Context) {
 			"status":      status,
 			"last_active": lastActive,
 		})
+	}
+
+	return sessions, nil
+}
+
+// Обработчик для маршрута /active_sessions
+func GetActiveSessionsHandler(c *gin.Context) {
+	sessions, err := GetActiveSessions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при получении активных сессий"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"active_sessions": sessions})
