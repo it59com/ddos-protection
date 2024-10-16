@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -46,14 +47,21 @@ func validateInterfaceAgent(interfaceName string) error {
 	return fmt.Errorf("интерфейс %s не найден", interfaceName)
 }
 
+// Обновленная функция для логирования
 func setupLogging(logFilePath string) error {
+	var logOutput io.Writer = os.Stdout // По умолчанию вывод в консоль
+
 	if runtime.GOOS == "linux" {
+		// Открываем файл для логов
 		logFile, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("не удалось открыть файл для логирования: %w", err)
 		}
-		log.SetOutput(logFile)
+		// Вывод логов одновременно в файл и в консоль
+		logOutput = io.MultiWriter(os.Stdout, logFile)
 	}
+
+	log.SetOutput(logOutput)
 	return nil
 }
 
@@ -79,7 +87,7 @@ func demonize() error {
 }
 
 func runAgent() {
-	// Настраиваем логирование в файл
+	// Настраиваем логирование в файл и консоль
 	if err := setupLogging("/var/log/ddos-agent.log"); err != nil {
 		log.Fatalf("Ошибка при настройке логирования: %v", err)
 	}

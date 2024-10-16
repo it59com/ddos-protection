@@ -2,7 +2,6 @@ package services
 
 import (
 	"ddos-protection-api/auth"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -55,7 +54,9 @@ func WebSocketHandler(c *gin.Context) {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	claims, err := auth.ValidateToken(token)
+	log.Printf("WebSocket Аутентификация: %v", token)
 	if err != nil {
+		log.Printf("WebSocket Аутентификация Ошибка: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный или истекший токен"})
 		return
 	}
@@ -71,7 +72,7 @@ func WebSocketHandler(c *gin.Context) {
 		conn.Close()
 	}()
 	// Уникальный ключ для хранения сессии агента
-	key := fmt.Sprintf("%d:%s", claims.UserID, token)
+	//key := fmt.Sprintf("%d:%s", claims.UserID, token)
 
 	agentConnection := &AgentConnection{
 		conn:       conn,

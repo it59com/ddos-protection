@@ -47,7 +47,7 @@ func NewWebSocketAgent(url, token, agentName string) *WebSocketAgent {
 func (agent *WebSocketAgent) Connect() {
 	headers := http.Header{}
 	headers.Add("Authorization", "Bearer "+agent.token)
-
+	//headers.Add("Origin", "http://localhost") // Проверьте правильность Origin
 	retryDelay := 5 * time.Second
 	firstConnection := true
 
@@ -128,20 +128,6 @@ func (agent *WebSocketAgent) ReceiveMessages() {
 		} else if messageType == websocket.CloseMessage {
 			log.Println("WS-AGENT: Получено сообщение о закрытии соединения")
 			break
-		}
-	}
-}
-
-// Проверяет текущее состояние WebSocket соединения для конкретного агента
-func (agent *WebSocketAgent) checkWebsocketAgent(userID int) {
-	if agent.conn == nil {
-		log.Printf(PurpleColor+"WS-AGENT: Соединение для пользователя %d не установлено."+ResetColor, userID)
-	} else {
-		err := agent.conn.WriteMessage(websocket.PingMessage, nil)
-		if err != nil {
-			log.Printf(PurpleColor+"WS-AGENT: Ошибка при проверке активности соединения для пользователя %d: %v"+ResetColor, userID, err)
-		} else {
-			log.Printf(PurpleColor+"WS-AGENT: Соединение для пользователя %d активно."+ResetColor, userID)
 		}
 	}
 }

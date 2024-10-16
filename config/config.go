@@ -27,6 +27,7 @@ type Config struct {
 		Password string `json:"password"`
 		DB       int    `json:"db"`
 	} `json:"redis"`
+	LogFile string `json:"log_file"`
 }
 
 var AppConfig *Config

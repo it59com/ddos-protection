@@ -28,6 +28,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Проверка токена
 		token := parts[1]
+		
 		claims, err := auth.ValidateToken(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "недействительный токен"})
