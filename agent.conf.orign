@@ -1,0 +1,10 @@
+{
+    "server_url": "http://127.0.01:8080",
+    "token": "",
+    "interface": "eth0",
+    "agent_name": "Agent-dev",
+    "protocols": ["tcp", "udp"],
+    "ports": [22, 80, 443],
+    "request_limit": 10,
+    "time_window_ms": 1000
+}
