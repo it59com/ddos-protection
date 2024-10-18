@@ -6,5 +6,6 @@
     "protocols": ["tcp", "udp"],
     "ports": [22, 80, 443],
     "request_limit": 10,
-    "time_window_ms": 1000
+    "time_window_ms": 1000,
+    "exclude_ips" : ["192.168.0.0/24", "127.0.0.01"]
 }

@@ -78,6 +78,7 @@ func WebSocketHandler(c *gin.Context) {
 	}
 	defer func() {
 		log.Println("Закрытие WebSocket соединения")
+		updateSessionStatus(claims.UserID, token, claims.Email, "offline")
 		conn.Close()
 	}()
 	// Уникальный ключ для хранения сессии агента
@@ -109,6 +110,8 @@ func WebSocketHandler(c *gin.Context) {
 	}
 	agentConnection.agentName = string(message)
 	log.Printf("Агент %s подключен для пользователя %d", agentConnection.agentName, claims.UserID)
+	//UpdateAgentSession(claims.UserID, token, agentConnection.agentName)
+	updateSessionStatus(claims.UserID, token, agentConnection.agentName, "online")
 
 	// Отправляем приветственное сообщение агенту после подключения
 	if err := agentConnection.SendMessage("server-ok"); err != nil {

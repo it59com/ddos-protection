@@ -2,9 +2,7 @@
 *.db
 *.exe
 .git
-agent
 main
-update
 config.json
 agent.conf
 *.zip

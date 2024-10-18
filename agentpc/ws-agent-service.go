@@ -57,7 +57,7 @@ func (agent *WebSocketAgent) Connect() {
 			log.Printf("Ошибка подключения к WebSocket серверу: %v. Повторная попытка через %v...", err, retryDelay)
 			time.Sleep(retryDelay)
 			if retryDelay < 60*time.Second {
-				retryDelay *= 2
+				retryDelay *= 1
 			}
 			continue
 		}

@@ -1,10 +1,10 @@
 # Папка для сборки
-BUILD_DIR = build
+BUILD_DIR = ./build
 
 # Пути к исходным файлам
-SERVER_SRC = server/server.go
-AGENT_SRC = agent/agent.go
-UPDATE_SRC = update/update.go
+SERVER_SRC = ./server/server.go
+AGENT_SRC = ./agent/agent.go
+UPDATE_SRC = ./update/update.go
 
 # Пути к исполняемым файлам
 SERVER_BIN = $(BUILD_DIR)/server

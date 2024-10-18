@@ -95,6 +95,14 @@ func isAllowedPort(port int, ports []int) bool {
 }
 
 func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
+	// Check if the IP is in the excluded list
+	for _, excludedIP := range config.ExcludeIPs {
+		if strings.HasPrefix(ip, excludedIP) {
+			//log.Printf("IP %s исключен из подсчета", ip)
+			return false
+		}
+	}
+
 	ipPortMutex.Lock()
 	defer ipPortMutex.Unlock()
 
