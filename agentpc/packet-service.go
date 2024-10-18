@@ -3,6 +3,7 @@ package agentpc
 import (
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -66,6 +67,22 @@ func HandlePacketsAgent(packetSource *gopacket.PacketSource, config *AgentConfig
 	}
 }
 
+func isIPExcluded(ip string, excludeList []string) bool {
+	ipAddr := net.ParseIP(ip)
+	for _, excluded := range excludeList {
+		_, cidr, err := net.ParseCIDR(excluded)
+		if err != nil {
+			// Если это не CIDR, проверяем как отдельный IP
+			if excluded == ip {
+				return true
+			}
+		} else if cidr.Contains(ipAddr) {
+			return true
+		}
+	}
+	return false
+}
+
 func isAllowedProtocol(packet gopacket.Packet, protocols []string) bool {
 	if transportLayer := packet.TransportLayer(); transportLayer != nil {
 		protocol := transportLayer.LayerType()
@@ -96,11 +113,9 @@ func isAllowedPort(port int, ports []int) bool {
 
 func checkAndBlockIP(ip string, port int, config *AgentConfig) bool {
 	// Check if the IP is in the excluded list
-	for _, excludedIP := range config.ExcludeIPs {
-		if strings.HasPrefix(ip, excludedIP) {
-			//log.Printf("IP %s исключен из подсчета", ip)
-			return false
-		}
+	if isIPExcluded(ip, config.ExcludeIPs) {
+		// log.Printf("IP %s исключен из подсчета", ip)
+		return false
 	}
 
 	ipPortMutex.Lock()
